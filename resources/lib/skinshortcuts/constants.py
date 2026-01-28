@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-MENU_FILE = "menu.xml"
 MENUS_FILE = "menus.xml"
 WIDGETS_FILE = "widgets.xml"
 BACKGROUNDS_FILE = "backgrounds.xml"
 PROPERTIES_FILE = "properties.xml"
 TEMPLATES_FILE = "templates.xml"
+VIEWS_FILE = "views.xml"
 INCLUDES_FILE = "script-skinshortcuts-includes.xml"
 
 DEFAULT_ICON = "DefaultShortcut.png"
 DEFAULT_TARGET = "videos"
+DEFAULT_VIEW_PREFIX = "ShortcutView_"
 
 WIDGET_TYPES = frozenset(
     {
@@ -54,8 +55,6 @@ PROPERTY_TYPES = frozenset(
 )
 
 
-# Window name mappings for actions and content
-# Maps various aliases to canonical Kodi window names
 WINDOW_MAP: dict[str, str] = {
     "video": "Videos",
     "videos": "Videos",
@@ -72,7 +71,6 @@ WINDOW_MAP: dict[str, str] = {
     "liveradio": "RadioChannels",
 }
 
-# Content target mappings (used for widget targets)
 TARGET_MAP: dict[str, str] = {
     "video": "videos",
     "videos": "videos",

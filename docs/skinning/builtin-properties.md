@@ -6,14 +6,14 @@ Properties available on menu items in the generated includes.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Core Properties](#core-properties)
-- [Widget Properties](#widget-properties)
-- [Background Properties](#background-properties)
-- [Submenu Properties](#submenu-properties)
-- [Custom Properties](#custom-properties)
-- [Template Properties](#template-properties)
-- [Accessing Properties](#accessing-properties)
+* [Overview](#overview)
+* [Core Properties](#core-properties)
+* [Widget Properties](#widget-properties)
+* [Background Properties](#background-properties)
+* [Submenu Properties](#submenu-properties)
+* [Custom Properties](#custom-properties)
+* [Template Properties](#template-properties)
+* [Accessing Properties](#accessing-properties)
 
 ---
 
@@ -72,7 +72,7 @@ For additional widget slots, use suffixed properties:
 
 | Slot | Properties |
 |------|------------|
-| Widget 2 | `widget.2`, `widgetPath.2`, `widgetType.2`, `widgetTarget.2`, `widgetLabel.2` |
+| Widget 2 | `widget.2`, `widgetPath.2`, `widgetType.2`, `widgetTarget.2`, `widgetLabel.2`, `widgetSource.2` |
 | Widget 3 | `widget.3`, `widgetPath.3`, ... |
 
 ### Usage
@@ -103,8 +103,8 @@ Set when a background is assigned to a menu item.
 
 | Property | Source | Description |
 |----------|--------|-------------|
-| `background` | Background name | Background identifier |
-| `backgroundLabel` | Background label | Display label |
+| `background` | Background name | Background identifier (path for browse/multi types) |
+| `backgroundLabel` | Background label | Display label (path for browse/multi types) |
 | `backgroundPath` | Background path | Image path or info label |
 
 ### Usage
@@ -151,8 +151,8 @@ Properties defined in `properties.xml` are stored on items.
 <!-- properties.xml -->
 <property name="widgetStyle" type="options">
   <options>
-    <option value="Panel" label="Panel"/>
-    <option value="Wide" label="Wide"/>
+    <option value="Panel" label="Panel" />
+    <option value="Wide" label="Wide" />
   </options>
 </property>
 ```
@@ -176,6 +176,8 @@ Properties defined in `properties.xml` are stored on items.
 </control>
 ```
 
+> **See also:** [Properties](properties.md) for defining custom properties
+
 ---
 
 ## Template Properties
@@ -187,8 +189,8 @@ Templates can define additional properties for output.
 ```xml
 <!-- templates.xml -->
 <template include="MainMenu" idprefix="menu">
-  <property name="id" from="id"/>
-  <property name="index" from="index"/>
+  <property name="id" from="id" />
+  <property name="index" from="index" />
   <property name="focusCondition">Container(9000).HasFocus($PROPERTY[index])</property>
   <var name="aspectRatio">
     <value condition="widgetArt=Poster">stretch</value>
@@ -222,6 +224,8 @@ Templates can define additional properties for output.
 <property name="layout" condition="widgetStyle=Panel">panel</property>
 <property name="layout">default</property>
 ```
+
+> **See also:** [Templates](templates.md) for full template system reference
 
 ---
 
@@ -281,3 +285,7 @@ Properties flow from:
 4. **Fallback values** - From `properties.xml` fallbacks
 
 Fallbacks only apply when a property is empty and the fallback condition matches.
+
+---
+
+[↑ Top](#built-in-properties) · [Skinning Docs](index.md)

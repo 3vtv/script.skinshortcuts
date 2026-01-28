@@ -10,8 +10,8 @@ from ..models.menu import (
     ActionOverride,
     Content,
     DefaultAction,
-    Group,
     IconSource,
+    IncludeRef,
     Menu,
     MenuAllow,
     MenuConfig,
@@ -20,12 +20,13 @@ from ..models.menu import (
     OnCloseAction,
     Protection,
     Shortcut,
+    ShortcutGroup,
     SubDialog,
 )
 from .base import get_attr, get_text, parse_content, parse_xml
 
 
-def load_menu_config(path: str | Path) -> MenuConfig:
+def load_menus(path: str | Path) -> MenuConfig:
     """Load complete menu configuration from menus.xml.
 
     Returns:
@@ -39,7 +40,7 @@ def load_menu_config(path: str | Path) -> MenuConfig:
     path_str = str(path)
 
     menus = _parse_menus(root, path_str)
-    groupings = _parse_groupings(root, path_str)
+    groupings = _parse_shortcut_groupings(root, path_str)
     icon_sources = _parse_icons(root)
     subdialogs = _parse_dialogs(root)
     action_overrides = _parse_overrides(root)
@@ -59,12 +60,10 @@ def _parse_menus(root, path: str) -> list[Menu]:
     """Parse menu and submenu elements from root."""
     menus = []
 
-    # Parse top-level menus
     for elem in root.findall("menu"):
         menu = _parse_menu(elem, path, is_submenu=False)
         menus.append(menu)
 
-    # Parse submenus (same structure, different tag for clarity)
     for elem in root.findall("submenu"):
         menu = _parse_menu(elem, path, is_submenu=True)
         menus.append(menu)
@@ -85,7 +84,6 @@ def _parse_icons(root) -> list[IconSource]:
 
     sources = []
 
-    # Check for <source> children first (advanced mode)
     source_elems = icons_elem.findall("source")
     if source_elems:
         for source_elem in source_elems:
@@ -96,10 +94,10 @@ def _parse_icons(root) -> list[IconSource]:
                     label=label,
                     path=path,
                     condition=get_attr(source_elem, "condition") or "",
+                    visible=get_attr(source_elem, "visible") or "",
                     icon=get_attr(source_elem, "icon") or "",
                 ))
     else:
-        # Simple mode: text content is the single path
         path = (icons_elem.text or "").strip()
         if path:
             sources.append(IconSource(label="", path=path))
@@ -154,16 +152,12 @@ def _parse_dialogs(root) -> list[SubDialog]:
         except ValueError:
             continue
 
-        # Parse optional setfocus
         setfocus = None
         setfocus_str = get_attr(elem, "setfocus")
         if setfocus_str and setfocus_str.isdigit():
             setfocus = int(setfocus_str)
 
-        # Parse optional suffix for property namespacing (e.g., ".2" for widget 2)
         suffix = get_attr(elem, "suffix") or ""
-
-        # Parse optional onclose actions
         onclose_actions = _parse_onclose(elem)
 
         subdialogs.append(
@@ -238,6 +232,9 @@ def _parse_menu(elem, path: str, is_submenu: bool = False) -> Menu:
     defaults = _parse_defaults(elem.find("defaults"))
     allow = _parse_allow(elem.find("allow"))
     container = get_attr(elem, "container") or None
+    controltype = get_attr(elem, "controltype") or ""
+    startid_str = get_attr(elem, "id") or ""
+    startid = int(startid_str) if startid_str.isdigit() else 1
 
     return Menu(
         name=menu_name,
@@ -246,6 +243,8 @@ def _parse_menu(elem, path: str, is_submenu: bool = False) -> Menu:
         allow=allow,
         container=container,
         is_submenu=is_submenu,
+        controltype=controltype,
+        startid=startid,
     )
 
 
@@ -258,29 +257,36 @@ def _parse_item(elem, menu_name: str, path: str) -> MenuItem:
     if not label:
         raise MenuConfigError(path, f"Item '{item_name}' missing <label>")
 
-    # Parse all action elements (supports conditional actions)
     actions = []
-    for action_elem in elem.findall("action"):
-        if action_elem.text:
+    includes = []
+    seen_action = False
+
+    for child in elem:
+        if child.tag == "action" and child.text:
+            seen_action = True
             actions.append(Action(
-                action=action_elem.text.strip(),
-                condition=get_attr(action_elem, "condition") or "",
+                action=child.text.strip(),
+                condition=get_attr(child, "condition") or "",
             ))
+        elif child.tag == "skinshortcuts":
+            include_name = get_attr(child, "include")
+            if include_name:
+                position = "after-onclick" if seen_action else "before-onclick"
+                includes.append(IncludeRef(
+                    name=include_name,
+                    condition=get_attr(child, "condition") or "",
+                    position=position,
+                ))
 
-    if not actions:
-        raise MenuConfigError(path, f"Item '{item_name}' missing <action>")
-
-    # Parse custom properties
     properties = {}
     for prop_elem in elem.findall("property"):
         prop_name = get_attr(prop_elem, "name")
         if prop_name and prop_elem.text:
             properties[prop_name] = prop_elem.text.strip()
 
-    # Support both <visible> (preferred) and <visibility> (legacy)
-    visible = get_text(elem, "visible") or get_text(elem, "visibility") or ""
+    visible_parts = [v.text.strip() for v in elem.findall("visible") if v.text]
+    visible = " + ".join(visible_parts) if visible_parts else ""
 
-    # Add widget and background as properties if specified (as attributes on the item)
     widget_attr = get_attr(elem, "widget")
     if widget_attr:
         properties["widget"] = widget_attr
@@ -288,7 +294,6 @@ def _parse_item(elem, menu_name: str, path: str) -> MenuItem:
     if background_attr:
         properties["background"] = background_attr
 
-    # Parse protection element if present
     protection = None
     protect_elem = elem.find("protect")
     if protect_elem is not None:
@@ -298,7 +303,6 @@ def _parse_item(elem, menu_name: str, path: str) -> MenuItem:
             message=get_attr(protect_elem, "message", ""),
         )
 
-    # visible= attribute filters in management dialog (Kodi visibility condition)
     dialog_visible = get_attr(elem, "visible") or ""
 
     return MenuItem(
@@ -315,6 +319,7 @@ def _parse_item(elem, menu_name: str, path: str) -> MenuItem:
         protection=protection,
         properties=properties,
         submenu=get_attr(elem, "submenu"),
+        includes=includes,
     )
 
 
@@ -328,7 +333,6 @@ def _parse_defaults(elem) -> MenuDefaults:
         if name and prop_elem.text:
             properties[name] = prop_elem.text.strip()
 
-    # Add widget and background as properties if specified (as attributes on defaults)
     widget_attr = get_attr(elem, "widget")
     if widget_attr:
         properties["widget"] = widget_attr
@@ -336,19 +340,32 @@ def _parse_defaults(elem) -> MenuDefaults:
     if background_attr:
         properties["background"] = background_attr
 
-    # Parse default actions (with when="before|after" and optional condition)
     actions = []
-    for action_elem in elem.findall("action"):
-        if action_elem.text:
+    includes = []
+    seen_action = False
+
+    for child in elem:
+        if child.tag == "action" and child.text:
+            seen_action = True
             actions.append(DefaultAction(
-                action=action_elem.text.strip(),
-                when=get_attr(action_elem, "when") or "before",
-                condition=get_attr(action_elem, "condition") or "",
+                action=child.text.strip(),
+                when=get_attr(child, "when") or "before",
+                condition=get_attr(child, "condition") or "",
             ))
+        elif child.tag == "skinshortcuts":
+            include_name = get_attr(child, "include")
+            if include_name:
+                position = "after-onclick" if seen_action else "before-onclick"
+                includes.append(IncludeRef(
+                    name=include_name,
+                    condition=get_attr(child, "condition") or "",
+                    position=position,
+                ))
 
     return MenuDefaults(
         properties=properties,
         actions=actions,
+        includes=includes,
     )
 
 
@@ -359,7 +376,7 @@ def _parse_allow(elem) -> MenuAllow:
     def parse_bool(value: str | None, default: bool = True) -> bool:
         if value is None:
             return default
-        return value.lower() in ("true", "1", "yes")
+        return value.lower() == "true"
 
     return MenuAllow(
         widgets=parse_bool(get_attr(elem, "widgets")),
@@ -368,13 +385,13 @@ def _parse_allow(elem) -> MenuAllow:
     )
 
 
-def load_groupings(path: str | Path) -> list[Group]:
+def load_groupings(path: str | Path) -> list[ShortcutGroup]:
     """Load shortcut groupings from menus.xml file.
 
     Groupings define the available shortcuts for the picker dialog.
     They are stored inside a <groupings> element within <menus>.
 
-    Note: Consider using load_menu_config() instead which returns full MenuConfig.
+    Note: Consider using load_menus() instead which returns full MenuConfig.
 
     Schema:
         <menus>
@@ -387,7 +404,7 @@ def load_groupings(path: str | Path) -> list[Group]:
               <shortcut name="..." label="..." browse="videos">
                 <path>videodb://movies/genres/</path>
               </shortcut>
-              <content source="playlists" target="video"/>
+              <content source="playlists" target="videos"/>
               <group name="...">...</group>  <!-- nested -->
             </group>
           </groupings>
@@ -398,10 +415,10 @@ def load_groupings(path: str | Path) -> list[Group]:
         return []
 
     root = parse_xml(path, "menus", MenuConfigError)
-    return _parse_groupings(root, str(path))
+    return _parse_shortcut_groupings(root, str(path))
 
 
-def _parse_groupings(root, path: str) -> list[Group]:
+def _parse_shortcut_groupings(root, path: str) -> list[ShortcutGroup]:
     """Parse groupings from root element."""
     groupings_elem = root.find("groupings")
     if groupings_elem is None:
@@ -409,14 +426,14 @@ def _parse_groupings(root, path: str) -> list[Group]:
 
     groups = []
     for group_elem in groupings_elem.findall("group"):
-        group = _parse_group(group_elem, path)
+        group = _parse_shortcut_group(group_elem, path)
         if group:
             groups.append(group)
 
     return groups
 
 
-def _parse_group(elem, path: str) -> Group | None:
+def _parse_shortcut_group(elem, path: str) -> ShortcutGroup | None:
     """Parse a group element (supports nested groups, shortcuts, and content refs)."""
     group_name = get_attr(elem, "name")
     label = get_attr(elem, "label")
@@ -425,16 +442,15 @@ def _parse_group(elem, path: str) -> Group | None:
 
     condition = get_attr(elem, "condition") or ""
     icon = get_attr(elem, "icon") or ""
-    items: list[Shortcut | Group | Content] = []
+    items: list[Shortcut | ShortcutGroup | Content] = []
 
-    # Parse children in document order to preserve sequence
     for child in elem:
         if child.tag == "shortcut":
             shortcut = _parse_shortcut(child, path)
             if shortcut:
                 items.append(shortcut)
         elif child.tag == "group":
-            nested = _parse_group(child, path)
+            nested = _parse_shortcut_group(child, path)
             if nested:
                 items.append(nested)
         elif child.tag == "content":
@@ -443,7 +459,7 @@ def _parse_group(elem, path: str) -> Group | None:
                 items.append(content)
 
     visible = get_attr(elem, "visible") or ""
-    return Group(
+    return ShortcutGroup(
         name=group_name, label=label, condition=condition, visible=visible, icon=icon, items=items
     )
 

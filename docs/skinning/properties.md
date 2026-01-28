@@ -6,14 +6,14 @@ The `properties.xml` file defines custom properties, button mappings, and fallba
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [File Structure](#file-structure)
-- [Property Element](#property-element)
-- [Options](#options)
-- [Button Mappings](#button-mappings)
-- [Fallbacks](#fallbacks)
-- [Includes](#includes)
-- [Suffix Transforms](#suffix-transforms)
+* [Overview](#overview)
+* [File Structure](#file-structure)
+* [Property Element](#property-element)
+* [Options](#options)
+* [Button Mappings](#button-mappings)
+* [Fallbacks](#fallbacks)
+* [Includes](#includes)
+* [Suffix Transforms](#suffix-transforms)
 
 ---
 
@@ -21,10 +21,10 @@ The `properties.xml` file defines custom properties, button mappings, and fallba
 
 Properties extend menu items beyond built-in fields (label, icon, action). Common uses:
 
-- Widget style selection (Panel, Wide, Poster)
-- Art type selection (Poster, Fanart, Landscape)
-- Custom toggle settings
-- Any skin-specific metadata
+* Widget style selection (Panel, Wide, Poster)
+* Art type selection (Poster, Fanart, Landscape)
+* Custom toggle settings
+* Any skin-specific metadata
 
 ---
 
@@ -36,24 +36,24 @@ Properties extend menu items beyond built-in fields (label, icon, action). Commo
   <!-- Reusable option sets -->
   <includes>
     <include name="artOptions">
-      <option value="Poster" label="$LOCALIZE[31001]"/>
-      <option value="Landscape" label="$LOCALIZE[31002]"/>
+      <option value="Poster" label="$LOCALIZE[31001]" />
+      <option value="Landscape" label="$LOCALIZE[31002]" />
     </include>
   </includes>
 
   <!-- Property definitions -->
   <property name="widgetStyle" type="options" requires="widget">
     <options>
-      <option value="Panel" label="Panel"/>
-      <option value="Wide" label="Wide"/>
+      <option value="Panel" label="Panel" />
+      <option value="Wide" label="Wide" />
     </options>
   </property>
 
   <!-- Button mappings -->
   <buttons suffix="true">
-    <button id="350" property="widgetStyle" title="Widget Style"/>
+    <button id="350" property="widgetStyle" title="Widget Style" />
     <group suffix="false">
-      <button id="360" property="someProperty"/>
+      <button id="360" property="someProperty" />
     </group>
   </buttons>
 
@@ -113,7 +113,7 @@ Properties extend menu items beyond built-in fields (label, icon, action). Commo
   <option value="Wide" label="$LOCALIZE[31002]">
     <icon>wide.png</icon>
   </option>
-  <include content="artOptions"/>
+  <include content="artOptions" />
 </options>
 ```
 
@@ -148,10 +148,10 @@ Map control IDs to properties.
 ```xml
 <buttons suffix="true">
   <button id="350" property="widgetStyle" title="Widget Style"
-          showNone="true" showIcons="true" type="options" requires="widget"/>
+          showNone="true" showIcons="true" type="options" requires="widget" />
 
   <group suffix="false">
-    <button id="360" property="globalProp"/>
+    <button id="360" property="globalProp" />
   </group>
 </buttons>
 ```
@@ -181,10 +181,12 @@ Group buttons with shared settings:
 
 ```xml
 <group suffix="true">
-  <button id="351" property="widgetStyle"/>
-  <button id="352" property="widgetArt"/>
+  <button id="351" property="widgetStyle" />
+  <button id="352" property="widgetArt" />
 </group>
 ```
+
+> **See also:** [Management Dialog](management-dialog.md#control-ids) for control ID reference
 
 ---
 
@@ -212,10 +214,12 @@ Default values when property is not set:
 </fallback>
 ```
 
-- `<when condition="...">` - Use this value if condition matches
-- `<default>` - Use if no conditions match
+* `<when condition="...">` - Use this value if condition matches
+* `<default>` - Use if no conditions match
 
 Rules are evaluated in order. First match wins.
+
+> **See also:** [Conditions](conditions.md) for condition syntax
 
 ---
 
@@ -240,14 +244,14 @@ Reuse option sets across properties:
 
 <property name="widgetArt">
   <options>
-    <include content="standardArt"/>
-    <option value="Custom" label="Custom"/>
+    <include content="standardArt" />
+    <option value="Custom" label="Custom" />
   </options>
 </property>
 
 <property name="backgroundArt">
   <options>
-    <include content="standardArt" suffix=".bg"/>
+    <include content="standardArt" suffix=".bg" />
   </options>
 </property>
 ```
@@ -271,10 +275,10 @@ With `suffix=".2"`:
 
 ```xml
 <!-- Original -->
-<option value="Panel" condition="widgetType=movies"/>
+<option value="Panel" condition="widgetType=movies" />
 
 <!-- Transformed -->
-<option value="Panel" condition="widgetType.2=movies"/>
+<option value="Panel" condition="widgetType.2=movies" />
 ```
 
 ### In Button Mappings
@@ -282,10 +286,10 @@ With `suffix=".2"`:
 ```xml
 <buttons>
   <!-- Widget 1 properties (no suffix) -->
-  <button id="350" property="widgetStyle" suffix="false"/>
+  <button id="350" property="widgetStyle" suffix="false" />
 
   <!-- Widget 2 properties (with suffix) -->
-  <button id="351" property="widgetStyle" suffix="true"/>
+  <button id="351" property="widgetStyle" suffix="true" />
 </buttons>
 ```
 
@@ -297,7 +301,7 @@ Subdialogs set suffix via the `suffix` attribute:
 
 ```xml
 <!-- In menus.xml -->
-<subdialog buttonID="801" mode="widget2" suffix=".2"/>
+<subdialog buttonID="801" mode="widget2" suffix=".2" />
 ```
 
 Button mappings with `suffix="true"` automatically use the dialog's suffix.
@@ -325,25 +329,25 @@ Button mappings with `suffix="true"` automatically use the dialog's suffix.
 
   <property name="widgetStyle" type="options" requires="widget">
     <options>
-      <option value="Panel" label="Panel"/>
-      <option value="Wide" label="Wide"/>
-      <option value="Showcase" label="Showcase"/>
+      <option value="Panel" label="Panel" />
+      <option value="Wide" label="Wide" />
+      <option value="Showcase" label="Showcase" />
     </options>
   </property>
 
   <property name="widgetArt" type="options" requires="widget">
     <options>
-      <include content="artTypes"/>
+      <include content="artTypes" />
     </options>
   </property>
 
-  <property name="hideLabels" type="toggle"/>
+  <property name="hideLabels" type="toggle" />
 
   <buttons suffix="true">
-    <button id="350" property="widgetStyle" title="Widget Style" requires="widget"/>
-    <button id="351" property="widgetArt" title="Widget Art" requires="widget"/>
+    <button id="350" property="widgetStyle" title="Widget Style" requires="widget" />
+    <button id="351" property="widgetArt" title="Widget Art" requires="widget" />
     <group suffix="false">
-      <button id="360" property="hideLabels" title="Hide Labels" type="toggle"/>
+      <button id="360" property="hideLabels" title="Hide Labels" type="toggle" />
     </group>
   </buttons>
 
@@ -361,3 +365,7 @@ Button mappings with `suffix="true"` automatically use the dialog's suffix.
   </fallbacks>
 </properties>
 ```
+
+---
+
+[↑ Top](#property-configuration) · [Skinning Docs](index.md)

@@ -6,19 +6,19 @@ The `menus.xml` file defines menu structure, items, shortcut picker groupings, a
 
 ## Table of Contents
 
-- [File Structure](#file-structure)
-- [Menu Element](#menu-element)
-- [Submenu Element](#submenu-element)
-- [Item Element](#item-element)
-- [Actions](#actions)
-- [Defaults](#defaults)
-- [Allow Settings](#allow-settings)
-- [Protection](#protection)
-- [Shortcut Groupings](#shortcut-groupings)
-- [Icon Sources](#icon-sources)
-- [Subdialogs](#subdialogs)
-- [Action Overrides](#action-overrides)
-- [Context Menu](#context-menu)
+* [File Structure](#file-structure)
+* [Menu Element](#menu-element)
+* [Submenu Element](#submenu-element)
+* [Item Element](#item-element)
+* [Actions](#actions)
+* [Defaults](#defaults)
+* [Allow Settings](#allow-settings)
+* [Protection](#protection)
+* [Shortcut Groupings](#shortcut-groupings)
+* [Icon Sources](#icon-sources)
+* [Subdialogs](#subdialogs)
+* [Action Overrides](#action-overrides)
+* [Context Menu](#context-menu)
 
 ---
 
@@ -71,8 +71,14 @@ Defines a standalone menu that generates an include.
 |-----------|----------|-------------|
 | `name` | Yes | Unique identifier. Generated include is `skinshortcuts-{name}` |
 | `container` | No | List control ID for visibility conditions |
+| `controltype` | No | Output as `<control type="X">` instead of `<item>` (e.g., `button`) |
+| `id` | No | Starting control ID for `controltype` menus (default: 1) |
 
 **Container binding:** When `container` is set, visibility conditions are generated for submenus and widgets based on focused item position.
+
+**Control type menus:** When `controltype="button"`, items are output as `<control type="button">` elements instead of `<item>` elements. Use this for menus displayed in grouplists where you need individual button controls. Properties are not included in control output.
+
+**Control IDs:** Use `id` to set the starting control ID for `controltype` menus. For example, `id="8000"` outputs controls with IDs 8000, 8001, 8002, etc. This avoids conflicts with other controls in the window. Ignored for regular item menus.
 
 ---
 
@@ -82,7 +88,7 @@ Defines a menu that is only built when referenced by a parent item.
 
 ```xml
 <submenu name="movies">
-  <allow widgets="false" backgrounds="false" submenus="false"/>
+  <allow widgets="false" backgrounds="false" submenus="false" />
   <item name="all-movies">
     <label>All Movies</label>
     <action>ActivateWindow(Videos,videodb://movies/)</action>
@@ -92,8 +98,8 @@ Defines a menu that is only built when referenced by a parent item.
 
 Submenus use the same structure as `<menu>`. The only difference is:
 
-- `<menu>`: Always generates an include
-- `<submenu>`: Only generates when an item has `submenu="{name}"`
+* `<menu>`: Always generates an include
+* `<submenu>`: Only generates when an item has `submenu="{name}"`
 
 Link a submenu to an item:
 
@@ -130,6 +136,8 @@ Defines a menu item.
 | `submenu` | No | - | Submenu name to link |
 | `required` | No | `false` | If `true`, cannot be deleted |
 | `visible` | No | - | Kodi condition for dialog visibility filtering (hides item in management dialog) |
+| `widget` | No | - | Shorthand for `<property name="widget">` |
+| `background` | No | - | Shorthand for `<property name="background">` |
 
 ### Child Elements
 
@@ -141,7 +149,7 @@ Defines a menu item.
 | `<icon>` | No | `DefaultShortcut.png` | Icon path |
 | `<thumb>` | No | - | Thumbnail path |
 | `<visible>` | No | - | Visibility condition for generated output |
-| `<disabled>` | No | `false` | If `true`, item appears grayed out |
+| `<disabled>` | No | - | Set to `true` to gray out item |
 | `<property>` | No | - | Custom property (requires `name` attribute) |
 | `<protect>` | No | - | Protection rule |
 
@@ -151,6 +159,25 @@ Defines a menu item.
 |-------------------|---------------|---------|
 | `visible="..."` (attribute on `<item>`) | Management dialog | Hides item from dialog when condition fails (e.g., hide playdisc when no disc drive) |
 | `<visible>` (child element) | Generated include | Output as `<visible>` in the include file |
+
+### Multiple Visibility Conditions
+
+Multiple `<visible>` elements are combined with `+` (AND in Kodi):
+
+```xml
+<item name="sleep-timer">
+  <label>Sleep Timer</label>
+  <action>ActivateWindow(SleepTimerDialog)</action>
+  <visible>System.CanPowerDown</visible>
+  <visible>!System.HasAlarm(shutdowntimer)</visible>
+</item>
+```
+
+Output:
+
+```xml
+<visible>System.CanPowerDown + !System.HasAlarm(shutdowntimer)</visible>
+```
 
 ---
 
@@ -199,7 +226,7 @@ Menu-level defaults apply to all items in the menu.
 
 ```xml
 <menu name="mainmenu">
-  <allow widgets="true" backgrounds="true" submenus="true"/>
+  <allow widgets="true" backgrounds="true" submenus="true" />
   <defaults>
     <action when="before">Dialog.Close(all,true)</action>
     <property name="widgetStyle">Panel</property>
@@ -214,6 +241,15 @@ Menu-level defaults apply to all items in the menu.
 |---------|-------------|
 | `<action>` | Default actions for all items |
 | `<property>` | Default property values |
+| `<skinshortcuts>` | Include reference (for controltype menus) |
+
+The `<defaults>` element also supports `widget` and `background` attributes as shorthand:
+
+```xml
+<defaults widget="default-widget" background="default-bg">
+  <property name="otherProp">value</property>
+</defaults>
+```
 
 ### Default Actions
 
@@ -229,6 +265,49 @@ Menu-level defaults apply to all items in the menu.
 | `when` | `before`, `after` | When to run relative to item action |
 | `condition` | Kodi condition | Only run when condition is true |
 
+### Include References
+
+For `controltype` menus, insert include references into the output:
+
+```xml
+<defaults>
+  <skinshortcuts include="ButtonTextures" />
+  <action when="before">BeforeAction()</action>
+  <action when="after">AfterAction()</action>
+  <skinshortcuts include="ButtonExtras" condition="SomeCondition" />
+</defaults>
+```
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `include` | Yes | Name of include to reference |
+| `condition` | No | Condition attribute on the output include element |
+
+**Position matters:** Includes placed before `<action>` elements appear before onclick in output. Includes placed after appear after onclick.
+
+Output:
+```xml
+<control type="button" id="1">
+  <label>...</label>
+  <include>ButtonTextures</include>
+  <onclick>BeforeAction()</onclick>
+  <onclick>ItemAction()</onclick>
+  <onclick>AfterAction()</onclick>
+  <include condition="SomeCondition">ButtonExtras</include>
+</control>
+```
+
+Include references can also be added per-item:
+
+```xml
+<item name="special">
+  <label>Special Button</label>
+  <skinshortcuts include="BeforeStuff" />
+  <action>SpecialAction()</action>
+  <skinshortcuts include="AfterStuff" />
+</item>
+```
+
 ---
 
 ## Allow Settings
@@ -237,7 +316,7 @@ Controls which features are available in the management dialog. This is a direct
 
 ```xml
 <menu name="mainmenu">
-  <allow widgets="true" backgrounds="true" submenus="true"/>
+  <allow widgets="true" backgrounds="true" submenus="true" />
   ...
 </menu>
 ```
@@ -250,9 +329,11 @@ Controls which features are available in the management dialog. This is a direct
 
 These set window properties that your dialog skin can use for button visibility:
 
-- `Window.Property(allowWidgets)` = `true` or `false`
-- `Window.Property(allowBackgrounds)` = `true` or `false`
-- `Window.Property(allowSubmenus)` = `true` or `false`
+* `Window.Property(disableWidgets)` = `true` if disabled, empty if allowed
+* `Window.Property(disableBackgrounds)` = `true` if disabled, empty if allowed
+* `Window.Property(disableSubmenus)` = `true` if disabled, empty if allowed
+
+> **See also:** [Management Dialog](management-dialog.md) for using these properties in your dialog skin
 
 ---
 
@@ -260,7 +341,7 @@ These set window properties that your dialog skin can use for button visibility:
 
 Protect items from accidental changes.
 
-### Prevent Deletion
+### Prevent Deletion/Disabling
 
 ```xml
 <item name="settings" required="true">
@@ -269,13 +350,15 @@ Protect items from accidental changes.
 </item>
 ```
 
+Items with `required="true"` cannot be deleted or disabled. If a user previously deleted a required item, it will be automatically restored when the skinner adds the `required` attribute.
+
 ### Confirmation Dialog
 
 ```xml
 <item name="skin-settings">
   <label>Skin Settings</label>
   <action>ActivateWindow(SkinSettings)</action>
-  <protect type="all" heading="$LOCALIZE[19098]" message="$LOCALIZE[31377]"/>
+  <protect type="all" heading="$LOCALIZE[19098]" message="$LOCALIZE[31377]" />
 </item>
 ```
 
@@ -300,16 +383,15 @@ Define shortcuts available in the picker dialog.
       <action>ActivateWindow(Videos,videodb://movies/)</action>
     </shortcut>
 
-    <shortcut name="playlists" label="Browse Playlists" icon="DefaultPlaylist.png"
-              browse="videos" visible="Library.HasContent(movies)">
-      <path>special://videoplaylists/</path>
+    <shortcut name="playlists" label="Browse Playlists" icon="DefaultPlaylist.png" browse="videos" visible="Library.HasContent(movies)">
+      <path>special://profile/playlists/video/</path>
     </shortcut>
 
     <group name="addons" label="Add-ons" condition="...">
       <!-- Nested group -->
     </group>
 
-    <content source="playlists" target="video" folder="Video Playlists"/>
+    <content source="playlists" target="videos" folder="Video Playlists" />
   </group>
 </groupings>
 ```
@@ -357,7 +439,7 @@ Define shortcuts available in the picker dialog.
 
 ```xml
 <shortcut name="browse-videos" label="Browse Videos" browse="videos">
-  <path>special://videoplaylists/</path>
+  <path>special://profile/playlists/video/</path>
 </shortcut>
 ```
 
@@ -366,21 +448,42 @@ Define shortcuts available in the picker dialog.
 Add dynamic content from system sources:
 
 ```xml
-<content source="playlists" target="video" folder="Video Playlists"/>
-<content source="addons" target="video"/>
-<content source="favourites"/>
-<content source="sources" target="video"/>
+<content source="playlists" target="videos" folder="Video Playlists" />
+<content source="addons" target="videos" />
+<content source="favourites" />
+<content source="sources" target="videos" />
 ```
 
 | Attribute | Description |
 |-----------|-------------|
-| `source` | Content type: `playlists`, `addons`, `sources`, `favourites`, `pvr`, `commands`, `settings`, `library` |
-| `target` | Media context: `video`, `music`, `pictures`, `programs`, `tv`, `radio`. For `library` source, see [Library Target Values](widgets.md#library-target-values) |
+| `source` | Content type: `playlists`, `addons`, `sources`, `favourites`, `pvr`, `commands`, `settings`, `library`, `nodes` |
+| `target` | Media context: `videos`, `music`, `pictures`, `programs`, `tv`, `radio`. For `library` source, see [Library Target Values](widgets.md#library-target-values). For `nodes` source, see [Nodes Target Values](widgets.md#nodes-target-values) |
 | `folder` | Wrap items in a folder with this label |
 | `path` | Custom path override |
 | `label` | Custom label for the content group |
 | `icon` | Custom icon for the content group |
-| `condition` | Kodi visibility condition |
+| `condition` | Property condition (evaluated against item properties) |
+| `visible` | Kodi visibility condition (evaluated at runtime) |
+
+### Playlist Filtering
+
+When `source="playlists"`, the `target` attribute filters smart playlists (.xsp) by type:
+
+| Target | Includes playlist types |
+|--------|-------------------------|
+| `video` | movies, tvshows, episodes, musicvideos |
+| `music` | songs, albums, artists |
+| (omitted) | All types including mixed |
+
+### Playlist Action Choice
+
+When the user selects a playlist shortcut, a dialog offers action choices:
+
+* **Display** - Opens the playlist in the library view (ActivateWindow)
+* **Play** - Plays the playlist immediately (PlayMedia)
+* **Party Mode** - Starts party mode shuffle (music playlists only)
+
+> **See also:** [Conditions](conditions.md) for `condition` and `visible` attribute syntax
 
 ---
 
@@ -402,10 +505,10 @@ Multiple conditional sources:
 
 ```xml
 <icons>
-  <source label="Colored Icons" condition="Skin.HasSetting(UseColoredIcons)">
+  <source label="Colored Icons" visible="Skin.HasSetting(UseColoredIcons)">
     special://skin/extras/icons/colored/
   </source>
-  <source label="Monochrome Icons" condition="!Skin.HasSetting(UseColoredIcons)">
+  <source label="Monochrome Icons" visible="!Skin.HasSetting(UseColoredIcons)">
     special://skin/extras/icons/mono/
   </source>
   <source label="Browse..." icon="DefaultFolder.png">browse</source>
@@ -415,7 +518,8 @@ Multiple conditional sources:
 | Attribute | Description |
 |-----------|-------------|
 | `label` | Display label in picker |
-| `condition` | Kodi visibility condition |
+| `condition` | Property condition (evaluated against item properties) |
+| `visible` | Kodi visibility condition (evaluated at runtime) |
 | `icon` | Icon for this source |
 
 Use `browse` as the path for free file browser.
@@ -429,10 +533,10 @@ Define subdialogs triggered by button clicks. Used for multi-widget support.
 ```xml
 <dialogs>
   <subdialog buttonID="800" mode="widget1" setfocus="309">
-    <onclose condition="widgetType=custom" action="menu" menu="{item}.customwidget"/>
+    <onclose condition="widgetType=custom" action="menu" menu="{item}.customwidget" />
   </subdialog>
   <subdialog buttonID="801" mode="widget2" setfocus="309" suffix=".2">
-    <onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2"/>
+    <onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2" />
   </subdialog>
 </dialogs>
 ```
@@ -442,9 +546,9 @@ Define subdialogs triggered by button clicks. Used for multi-widget support.
 | Attribute | Required | Description |
 |-----------|----------|-------------|
 | `buttonID` | Yes | Button ID that triggers this subdialog |
-| `mode` | Yes | Value set in `Window.Property(skinshortcuts-dialog)` |
+| `mode` | Yes | Value set in `Window(Home).Property(skinshortcuts-dialog)` |
 | `setfocus` | No | Control ID to focus when subdialog opens |
-| `suffix` | No | Property suffix for widget slots (e.g., `.2`) |
+| `suffix` | No | Property suffix for widget slots (e.g., `.2`). Set in `Window(Home).Property(skinshortcuts-suffix)` |
 
 ### `<onclose>` Attributes
 
@@ -453,6 +557,10 @@ Define subdialogs triggered by button clicks. Used for multi-widget support.
 | `action` | Action type: `menu` |
 | `menu` | Menu name for `action="menu"`. Supports `{item}` placeholder |
 | `condition` | Condition evaluated against item properties |
+
+> **See also:**
+> - [Management Dialog](management-dialog.md#subdialogs) for implementing subdialog UI
+> - [Templates - Dynamic Widgets Pattern](templates.md#dynamic-widgets-pattern) for using subdialogs with items templates
 
 ---
 
@@ -483,3 +591,7 @@ Enable or disable context menu on items:
 ```
 
 Default: `true`. Set to `false`, `no`, or `0` to disable.
+
+---
+
+[↑ Top](#menu-configuration) · [Skinning Docs](index.md)

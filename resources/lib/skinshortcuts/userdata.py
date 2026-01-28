@@ -15,7 +15,10 @@ try:
 except ImportError:
     IN_KODI = False
 
+from .log import get_logger
 from .models import Action, Menu, MenuItem
+
+log = get_logger("UserData")
 
 
 def get_userdata_path() -> str:
@@ -83,18 +86,67 @@ def _item_override_to_dict(item: MenuItemOverride) -> dict[str, Any]:
 
 @dataclass
 class UserData:
-    """All user customizations for a skin."""
+    """All user customizations for a skin.
+
+    The views field stores user view selections:
+    source -> content -> view_id
+    Sources are: 'library', 'plugins', or 'plugin.video.X' for specific plugins.
+    """
 
     menus: dict[str, MenuOverride] = field(default_factory=dict)
+    views: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
-            "menus": {
+        result: dict[str, Any] = {}
+        if self.menus:
+            result["menus"] = {
                 menu_id: _menu_override_to_dict(override)
                 for menu_id, override in self.menus.items()
             }
-        }
+        if self.views:
+            result["views"] = self.views
+        return result
+
+    def get_view(self, source: str, content: str) -> str | None:
+        """Get user's selected view for a source and content type."""
+        source_views = self.views.get(source)
+        if source_views:
+            return source_views.get(content)
+        return None
+
+    def set_view(self, source: str, content: str, view_id: str) -> None:
+        """Set user's view selection for a source and content type."""
+        if source not in self.views:
+            self.views[source] = {}
+        self.views[source][content] = view_id
+
+    def clear_view(self, source: str, content: str) -> None:
+        """Clear user's view selection for a source and content type."""
+        if source in self.views:
+            self.views[source].pop(content, None)
+            if not self.views[source]:
+                del self.views[source]
+
+    def clear_all_views(self) -> None:
+        """Clear all view selections."""
+        self.views.clear()
+
+    def get_addon_overrides(self, content: str) -> dict[str, str]:
+        """Get all addon-specific view overrides for a content type.
+
+        Returns dict of addon_id -> view_id for addons with custom selections.
+        Includes any source that isn't 'library' or 'plugins' (generic).
+        """
+        overrides = {}
+        for source, selections in self.views.items():
+            if source not in ("library", "plugins") and content in selections:
+                overrides[source] = selections[content]
+        return overrides
+
+    def get_plugin_overrides(self, content: str) -> dict[str, str]:
+        """Alias for get_addon_overrides for backward compatibility."""
+        return self.get_addon_overrides(content)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> UserData:
@@ -103,7 +155,6 @@ class UserData:
         for menu_id, menu_data in data.get("menus", {}).items():
             items = []
             for item_data in menu_data.get("items", []):
-                # Convert actions list to Action objects
                 actions_data = item_data.pop("actions", None)
                 actions = None
                 if actions_data is not None:
@@ -117,26 +168,33 @@ class UserData:
                 items.append(MenuItemOverride(**item_data, actions=actions))
             removed = menu_data.get("removed", [])
             menus[menu_id] = MenuOverride(items=items, removed=removed)
-        return cls(menus=menus)
+        views: dict[str, dict[str, str]] = data.get("views", {})
+        return cls(menus=menus, views=views)
 
 
 def load_userdata(path: str | None = None) -> UserData:
     """Load user data from JSON file."""
     if path is None:
         path = get_userdata_path()
+        log.debug(f"Userdata path: {path}")
 
     if not path:
+        log.warning("No userdata path available")
         return UserData()
 
     try:
         file_path = Path(path)
         if file_path.exists():
+            log.debug(f"Loading userdata from: {file_path}")
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
-                return UserData.from_dict(data)
+                userdata = UserData.from_dict(data)
+                log.debug(f"Loaded {len(userdata.menus)} menu overrides")
+                return userdata
+        else:
+            log.debug(f"Userdata file not found: {file_path}")
     except (OSError, json.JSONDecodeError) as e:
-        if IN_KODI:
-            xbmc.log(f"[skinshortcuts] Failed to load userdata from {path}: {e}", xbmc.LOGERROR)
+        log.error(f"Failed to load userdata from {path}: {e}")
 
     return UserData()
 
@@ -156,8 +214,7 @@ def save_userdata(userdata: UserData, path: str | None = None) -> bool:
             json.dump(userdata.to_dict(), f, indent=2)
         return True
     except OSError as e:
-        if IN_KODI:
-            xbmc.log(f"[skinshortcuts] Failed to save userdata to {path}: {e}", xbmc.LOGERROR)
+        log.error(f"Failed to save userdata to {path}: {e}")
         return False
 
 
@@ -188,40 +245,29 @@ def merge_menu(default_menu: Menu, override: MenuOverride | None) -> Menu:
             container=default_menu.container,
             allow=default_menu.allow,
             is_submenu=default_menu.is_submenu,
+            controltype=default_menu.controltype,
+            startid=default_menu.startid,
         )
 
-    # Start with default items, excluding removed ones and those failing dialog_visible
     items: list[MenuItem] = []
     for item in default_menu.items:
-        if item.name in override.removed:
+        if item.name in override.removed and not item.required:
             continue
-        # Filter by dialog_visible for items not explicitly in userdata
-        if item.name not in {o.name for o in override.items} and not _check_dialog_visible(
-            item.dialog_visible
-        ):
+        if item.dialog_visible and not _check_dialog_visible(item.dialog_visible):
             continue
         items.append(item)
 
-    # Create lookup for overrides
     override_map = {o.name: o for o in override.items}
 
-    # Apply overrides to existing items
     for i, item in enumerate(items):
         if item.name in override_map:
             ovr = override_map[item.name]
             items[i] = _apply_override(item, ovr)
 
-    # Add new user items at their specified positions (or at the end)
     new_items = [o for o in override.items if o.is_new]
     for new_item in new_items:
         items.append(_create_item_from_override(new_item))
 
-    # Reorder items based on positions
-    # Positions represent the desired index in the final list
-    # Items with positions are placed at their exact index
-    # Items without positions keep their relative order, filling gaps
-
-    # Collect items with explicit positions
     positioned_items: dict[int, MenuItem] = {}
     unpositioned_items: list[MenuItem] = []
 
@@ -232,7 +278,6 @@ def merge_menu(default_menu: Menu, override: MenuOverride | None) -> Menu:
         else:
             unpositioned_items.append(item)
 
-    # Build final list by placing items at their positions
     final_items: list[MenuItem] = []
     unpos_iter = iter(unpositioned_items)
 
@@ -240,13 +285,11 @@ def merge_menu(default_menu: Menu, override: MenuOverride | None) -> Menu:
         if i in positioned_items:
             final_items.append(positioned_items[i])
         else:
-            # Fill with next unpositioned item
             try:
                 final_items.append(next(unpos_iter))
             except StopIteration:
                 break
 
-    # Append any remaining unpositioned items
     for item in unpos_iter:
         final_items.append(item)
 
@@ -257,6 +300,8 @@ def merge_menu(default_menu: Menu, override: MenuOverride | None) -> Menu:
         container=default_menu.container,
         allow=default_menu.allow,
         is_submenu=default_menu.is_submenu,
+        controltype=default_menu.controltype,
+        startid=default_menu.startid,
     )
 
 
@@ -276,6 +321,7 @@ def _apply_override(item: MenuItem, override: MenuItemOverride) -> MenuItem:
         properties={**item.properties, **override.properties},
         submenu=item.submenu,
         original_action=item.action,  # Store original for protection matching
+        includes=item.includes,
     )
 
 

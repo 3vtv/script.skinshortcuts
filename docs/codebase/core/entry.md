@@ -1,131 +1,73 @@
 # entry.py
 
 **Path:** `resources/lib/skinshortcuts/entry.py`
-**Lines:** 338
-**Purpose:** Entry point for RunScript - handles all script invocations.
+**Purpose:** Entry point for RunScript invocations.
 
----
+***
 
-## Overview
+## main()
 
-This is the main entry point when the addon is invoked via `RunScript(script.skinshortcuts,...)`. It parses arguments and routes to the appropriate action.
+Main entry point. Parses arguments and routes to appropriate action.
 
----
-
-## Helper Functions
-
-### log(msg, level=0) (line 25)
-Log message to Kodi log or stdout.
-
-Uses `xbmc.log()` in Kodi, `print()` outside.
-
-### get_skin_path() → str (line 33)
-Get current skin's shortcuts folder path.
-
-**Path:** `special://skin/shortcuts/`
-
-### get_output_paths() → list[str] (line 41)
-Get paths for includes.xml output by parsing skin's addon.xml.
-
-Parses `<res folder="...">` elements to find all resolution folders.
-
----
-
-## Action Functions
-
-### build_includes(shortcuts_path=None, output_path=None, force=False) → bool (line 72)
-Build includes.xml from skin config files.
-
-**Parameters:**
-- `shortcuts_path` - Path to shortcuts folder (auto-detected if None)
-- `output_path` - Path to write includes.xml (auto-detected if None)
-- `force` - Force rebuild even if hashes match
-
-**Process:**
-1. Check if menu.xml or menus.xml exists
-2. Check if rebuild is needed (unless force=True)
-3. Load SkinConfig (with userdata)
-4. Build includes.xml to all resolution folders
-5. Save config hashes
-6. Reload skin
-
-**Returns:** True if built successfully
-
----
-
-### clear_custom_menu(menu, property_name="", shortcuts_path=None) → bool (line 159)
-Clear a custom widget menu and optionally reset a property.
-
-**Parameters:**
-- `menu` - Custom menu name (e.g., "movies.customwidget")
-- `property_name` - Optional property to clear on parent item
-- `shortcuts_path` - Path to shortcuts folder
-
-**Behavior:**
-1. Clear all items from the custom menu
-2. If property_name specified, clear widget properties on parent item
-3. Save changes and rebuild includes
-
-**Used by:** RunScript action type="clear"
-
----
-
-### reset_all_menus(shortcuts_path=None) → bool (line 244)
-Reset all menus to skin defaults by deleting skin's userdata.
-
-Shows confirmation dialog before proceeding.
-
-**Used by:** RunScript action type="resetall"
-
----
-
-## Main Entry Point
-
-### main() (line 285)
-Main entry point for RunScript.
-
-**Argument parsing:**
-- Accepts `?param=value` or `param=value` format
-- Parses with `urllib.parse.parse_qs()`
-
-**Actions (type parameter):**
+### Actions (type parameter)
 
 | Type | Description |
 |------|-------------|
-| `buildxml` (default) | Build includes.xml |
+| `buildxml` | Build includes.xml (default) |
 | `manage` | Open management dialog |
-| `resetall` | Reset to skin defaults |
+| `viewselect` | Open view selection dialog |
+| `resetall` | Reset everything to skin defaults |
+| `resetmenus` | Reset menus only (preserves views) |
+| `resetviews` | Reset view selections only |
+| `resetsubmenus` | Reset all submenus (menus defined with `<submenu>` tag) |
+| `reset` | Reset specific menu (follows submenu references if `submenus=true`) |
 | `clear` | Clear custom widget menu |
 
-**Parameters by action:**
+### Parameters
 
-**buildxml:**
-- `path` - Shortcuts path
-- `output` - Output path
-- `force` - Force rebuild
+**buildxml:** `path`, `output`, `force`
 
-**manage:**
-- `menu` - Menu ID (default: "mainmenu")
-- `path` - Shortcuts path
+**manage:** `menu` (default: mainmenu), `path`
 
-**clear:**
-- `menu` - Custom menu name
-- `property` - Property to clear
+**viewselect:** `content`, `plugin`, `path`
 
----
+**reset:** `menu`, `submenus`, `path`
 
-## Dead Code Analysis
+**clear:** `menu`, `item`, `suffix`, `property`, `path`
 
-All code appears to be in active use.
+***
 
----
+## Action Functions
 
-## Test Candidates
+### build_includes(shortcuts_path, output_path, force) → bool
 
-1. `build_includes()` hash-based skip logic
-2. `build_includes()` multi-resolution output
-3. `clear_custom_menu()` parent property clearing
-4. `main()` argument parsing
-5. `get_output_paths()` addon.xml parsing
+Build includes.xml. Uses hash-based skip unless force=True. Writes to all skin resolution folders.
 
-**Note:** Most tests require mocking Kodi APIs.
+### clear_custom_widget(menu, item, suffix, property_name, shortcuts_path) → bool
+
+Clear custom widget menu for an item. Removes the menu contents and optionally clears related properties.
+
+### reset_all_menus(shortcuts_path) → bool
+
+Reset all menus and views to skin defaults (deletes userdata). Shows confirmation dialog.
+
+### reset_menus(shortcuts_path) → bool
+
+Reset menus to skin defaults, preserving view selections. Shows confirmation dialog.
+
+### reset_views(shortcuts_path) → bool
+
+Reset all view selections to defaults, preserving menus. Shows confirmation dialog.
+
+### view_select(content, plugin, shortcuts_path) → bool
+
+Open view selection dialog. If `content` provided, opens direct picker. If `plugin` also provided, sets plugin-specific override.
+
+***
+
+## Helper Functions
+
+| Function | Description |
+|----------|-------------|
+| `get_skin_path()` | Get `special://skin/shortcuts/` path |
+| `get_output_paths()` | Get resolution folder paths from addon.xml |

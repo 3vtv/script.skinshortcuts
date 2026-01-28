@@ -6,19 +6,19 @@ The `backgrounds.xml` file defines background options that users can assign to m
 
 ## Table of Contents
 
-- [File Structure](#file-structure)
-- [Background Types](#background-types)
-- [Groups](#groups)
-- [Static](#static)
-- [Property](#property)
-- [Browse](#browse)
-- [Multi](#multi)
-- [Playlist](#playlist)
-- [Live](#live)
-- [Live Playlist](#live-playlist)
-- [Sources](#sources)
-- [Conditions](#conditions)
-- [Output Properties](#output-properties)
+* [File Structure](#file-structure)
+* [Background Types](#background-types)
+* [Groups](#groups)
+* [Static](#static)
+* [Property](#property)
+* [Browse](#browse)
+* [Multi](#multi)
+* [Playlist](#playlist)
+* [Live](#live)
+* [Live Playlist](#live-playlist)
+* [Sources](#sources)
+* [Conditions](#conditions)
+* [Output Properties](#output-properties)
 
 ---
 
@@ -103,9 +103,10 @@ Organize backgrounds into categories for the picker dialog:
 | `visible` | No | Kodi visibility condition (evaluated at runtime) |
 
 Groups can contain:
-- `<background>` - Background definitions
-- `<group>` - Nested groups
-- `<content>` - Dynamic content (same as widgets/menus)
+
+* `<background>` - Background definitions
+* `<group>` - Nested groups
+* `<content>` - Dynamic content (same as widgets/menus)
 
 ---
 
@@ -149,8 +150,7 @@ Uses a Kodi info label that resolves to an image path:
   <icon>DefaultPicture.png</icon>
 </background>
 
-<background name="slideshow" label="Random Movie Slideshow" type="property"
-            visible="System.AddonIsEnabled(script.skin.info.service) + Library.HasContent(movies)">
+<background name="slideshow" label="Random Movie Slideshow" type="property" visible="System.AddonIsEnabled(script.skin.info.service) + Library.HasContent(movies)">
   <path>$INFO[Window(Home).Property(SkinHelper.Slideshow.Movie.FanArt)]</path>
   <icon>DefaultMovies.png</icon>
 </background>
@@ -182,8 +182,7 @@ User browses for a single image file:
 Provide starting locations for the file browser:
 
 ```xml
-<source label="Skin Backgrounds" icon="DefaultFolder.png"
-        condition="Skin.HasSetting(UseHDBackgrounds)">
+<source label="Skin Backgrounds" icon="DefaultFolder.png" visible="Skin.HasSetting(UseHDBackgrounds)">
   special://skin/backgrounds/hd/
 </source>
 <source label="Browse...">browse</source>
@@ -193,7 +192,8 @@ Provide starting locations for the file browser:
 |-----------|-------------|
 | `label` | Display label in source picker |
 | `icon` | Icon for this source |
-| `condition` | Kodi visibility condition |
+| `condition` | Property condition (evaluated against item properties) |
+| `visible` | Kodi visibility condition (evaluated at runtime) |
 
 Use `browse` as the path for free file browser access.
 
@@ -222,8 +222,8 @@ User selects a playlist to extract images from:
 ```xml
 <background name="from-playlist" label="Playlist Images" type="playlist">
   <icon>DefaultPlaylist.png</icon>
-  <source label="Video Playlists">special://videoplaylists/</source>
-  <source label="Music Playlists">special://musicplaylists/</source>
+  <source label="Video Playlists">special://profile/playlists/video/</source>
+  <source label="Music Playlists">special://profile/playlists/music/</source>
   <source label="Skin Playlists">special://skin/playlists/</source>
 </background>
 ```
@@ -242,8 +242,7 @@ User selects a playlist to extract images from:
 Dynamic background from library content:
 
 ```xml
-<background name="random-movies" label="Random Movie Fanart" type="live"
-            visible="Library.HasContent(movies)">
+<background name="random-movies" label="Random Movie Fanart" type="live" visible="Library.HasContent(movies)">
   <path>random movies</path>
   <icon>DefaultMovies.png</icon>
 </background>
@@ -266,8 +265,8 @@ Dynamic content from a user-selected playlist:
 ```xml
 <background name="live-playlist" label="Live Playlist" type="live-playlist">
   <icon>DefaultPlaylist.png</icon>
-  <source label="Video Playlists">special://videoplaylists/</source>
-  <source label="Music Playlists">special://musicplaylists/</source>
+  <source label="Video Playlists">special://profile/playlists/video/</source>
+  <source label="Music Playlists">special://profile/playlists/music/</source>
 </background>
 ```
 
@@ -284,10 +283,17 @@ Both `<source>` elements are used differently based on background type:
 Sources provide starting locations for the file browser. Can include conditions:
 
 ```xml
-<source label="HD Backgrounds" condition="Skin.HasSetting(UseHD)">
+<source label="HD Backgrounds" visible="Skin.HasSetting(UseHD)">
   special://skin/backgrounds/hd/
 </source>
 ```
+
+| Attribute | Description |
+|-----------|-------------|
+| `label` | Display label in picker |
+| `condition` | Property condition (evaluated against item properties) |
+| `visible` | Kodi visibility condition (evaluated at runtime) |
+| `icon` | Icon for this source |
 
 ### For playlist/live-playlist types
 
@@ -295,7 +301,7 @@ Sources define playlist locations to browse:
 
 ```xml
 <source label="Video Playlists" icon="DefaultVideoPlaylists.png">
-  special://videoplaylists/
+  special://profile/playlists/video/
 </source>
 ```
 
@@ -320,8 +326,7 @@ See [Conditions](conditions.md) for syntax.
 Evaluated at runtime using `xbmc.getCondVisibility()`:
 
 ```xml
-<background name="skin-fanart" label="Skin Fanart"
-            visible="System.AddonIsEnabled(script.skin.info.service)">
+<background name="skin-fanart" label="Skin Fanart" visible="System.AddonIsEnabled(script.skin.info.service)">
   ...
 </background>
 
@@ -333,9 +338,7 @@ Evaluated at runtime using `xbmc.getCondVisibility()`:
 ### Multiple Conditions
 
 ```xml
-<background name="advanced" label="Advanced Background"
-            condition="widgetType=movies"
-            visible="Skin.HasSetting(ShowAdvancedBackgrounds)">
+<background name="advanced" label="Advanced Background" condition="widgetType=movies" visible="Skin.HasSetting(ShowAdvancedBackgrounds)">
   ...
 </background>
 ```
@@ -346,13 +349,32 @@ Both conditions must pass for the background to appear.
 
 ## Output Properties
 
-When a background is assigned to a menu item:
+When a background is assigned to a menu item, these core properties are set:
 
 | Property | Description |
 |----------|-------------|
-| `background` | Background name |
-| `backgroundPath` | Resolved image path |
-| `backgroundLabel` | Display label |
+| `background` | Background name (or path for browse/multi types) |
+| `backgroundPath` | Image path |
+| `backgroundLabel` | Display label (or path for browse/multi types) |
+| `backgroundType` | Background type (static, property, browse, etc.) |
+| `backgroundPlaylistType` | Playlist content type (for playlist/live-playlist types only) |
+
+The `backgroundPlaylistType` property contains the raw content type from the smart playlist (.xsp) file:
+
+| Value | Description |
+|-------|-------------|
+| `movies` | Movie content |
+| `tvshows` | TV show content |
+| `episodes` | Episode content (no posters) |
+| `musicvideos` | Music video content (no posters) |
+| `songs` | Song content |
+| `albums` | Album content |
+| `artists` | Artist content |
+| `mixed` | Mixed content types |
+
+Episodes and musicvideos don't have poster artwork. Skins can use this property to select fallback images.
+
+Additional properties can be configured via [properties.xml](properties.md).
 
 Access via `ListItem.Property(name)`:
 
@@ -364,4 +386,10 @@ Access via `ListItem.Property(name)`:
 </control>
 ```
 
-For static/property types, `backgroundPath` contains the resolved path. For browse/multi types, it contains the user-selected path. For playlist types, your skin handles the slideshow logic.
+For static/property types, `backgroundPath` contains the defined path. For browse/multi types, it contains the user-selected path. For playlist types, your skin handles the slideshow logic using the path.
+
+> **See also:** [Built-in Properties](builtin-properties.md) for complete property reference
+
+---
+
+[↑ Top](#background-configuration) · [Skinning Docs](index.md)

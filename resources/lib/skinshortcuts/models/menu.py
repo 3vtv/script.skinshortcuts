@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Union
 
-    # Group items can be: Shortcut, nested Group, or Content reference
-    GroupContent = Union["Shortcut", "Group", "Content"]
+    GroupContent = Union["Shortcut", "ShortcutGroup", "Content"]
 
 
 @dataclass
@@ -18,11 +17,16 @@ class IconSource:
 
     Used by the icon picker to provide browse locations. Supports both
     simple (single path) and advanced (multiple conditional sources) modes.
+
+    Attributes:
+        condition: Property condition (evaluated against item properties)
+        visible: Kodi visibility condition (evaluated at runtime)
     """
 
     label: str
     path: str  # Path to browse, or "browse" for free file browser
     condition: str = ""
+    visible: str = ""
     icon: str = ""
 
 
@@ -51,7 +55,8 @@ class Content:
             - "tv": Live TV
             - "radio": Radio
         path: Optional custom path (e.g., "special://skin/playlists/")
-        condition: Optional visibility condition
+        condition: Property condition (evaluated against item properties)
+        visible: Kodi visibility condition (evaluated at runtime)
         icon: Optional icon override
         label: Optional label override for the group
         folder: Optional label for wrapping resolved items in a sub-folder.
@@ -63,6 +68,7 @@ class Content:
     target: str = ""
     path: str = ""
     condition: str = ""
+    visible: str = ""
     icon: str = ""
     label: str = ""
     folder: str = ""
@@ -77,6 +83,24 @@ class Action:
 
     action: str
     condition: str = ""
+
+
+@dataclass
+class IncludeRef:
+    """A reference to an include, output as <include>name</include>.
+
+    Used with controltype menus to insert include references at specific
+    positions within the output control element.
+
+    Attributes:
+        name: The include name to reference
+        condition: Optional condition attribute on the include element
+        position: Where to place in output - "before-onclick", "after-onclick", or "end"
+    """
+
+    name: str
+    condition: str = ""
+    position: str = "end"
 
 
 @dataclass
@@ -131,8 +155,10 @@ class Shortcut:
     browse: str = ""
     type: str = ""
     icon: str = "DefaultShortcut.png"
-    condition: str = ""  # Property condition (evaluated against item properties)
-    visible: str = ""  # Kodi visibility condition (evaluated at runtime)
+    condition: str = ""
+    visible: str = ""
+    action_play: str = ""
+    action_party: str = ""
 
     def get_action(self) -> str:
         """Get the resolved action string.
@@ -149,12 +175,12 @@ class Shortcut:
 
 
 @dataclass
-class Group:
+class ShortcutGroup:
     """A group/category of shortcuts in groupings.
 
     Items can be:
     - Shortcut: A specific shortcut option
-    - Group: A nested sub-group
+    - ShortcutGroup: A nested sub-group
     - Content: A dynamic content reference resolved at runtime
     """
 
@@ -182,14 +208,10 @@ class MenuItem:
     required: bool = False  # If True, item cannot be deleted
     protection: Protection | None = None  # Optional protection against delete/modify
 
-    # All custom properties including widget/background data
     properties: dict[str, str] = field(default_factory=dict)
-
-    # Submenu reference (by name)
     submenu: str | None = None
-
-    # Original action for protection matching (set from defaults, not saved to userdata)
-    original_action: str = ""
+    original_action: str = ""  # Set from defaults, not saved to userdata
+    includes: list[IncludeRef] = field(default_factory=list)
 
     @property
     def action(self) -> str:
@@ -206,7 +228,6 @@ class MenuItem:
             if not act.condition:
                 act.action = value
                 return
-        # No unconditional action, add one
         self.actions.insert(0, Action(action=value))
 
 
@@ -231,6 +252,7 @@ class MenuDefaults:
 
     properties: dict[str, str] = field(default_factory=dict)
     actions: list[DefaultAction] = field(default_factory=list)
+    includes: list[IncludeRef] = field(default_factory=list)
 
 
 @dataclass
@@ -252,6 +274,8 @@ class Menu:
     allow: MenuAllow = field(default_factory=MenuAllow)
     container: str | None = None  # Container ID for submenu visibility
     is_submenu: bool = False  # True if defined with <submenu> tag (not built as root include)
+    controltype: str = ""  # Output as <control type="X"> instead of <item> (e.g., "button")
+    startid: int = 1  # Starting control ID for controltype menus
 
     def get_item(self, item_name: str) -> MenuItem | None:
         """Get item by name."""
@@ -354,7 +378,7 @@ class MenuConfig:
     """Menu configuration including menus, groupings, and icon sources."""
 
     menus: list[Menu] = field(default_factory=list)
-    groupings: list[Group] = field(default_factory=list)
+    groupings: list[ShortcutGroup] = field(default_factory=list)
     icon_sources: list[IconSource] = field(default_factory=list)
     subdialogs: list[SubDialog] = field(default_factory=list)
     action_overrides: list[ActionOverride] = field(default_factory=list)

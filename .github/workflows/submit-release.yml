@@ -1,4 +1,5 @@
 name: Submit Release
+
 on:
   push:
     tags:
@@ -13,14 +14,14 @@ jobs:
 
     steps:
       - name: Checkout Add-on
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ${{ github.event.repository.name }}
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -37,9 +38,13 @@ jobs:
           mv .git ..
           rm -rf .??*
           mv ../.git .
-          rm LICENSE.txt
-          rm README.md
+          rm -f LICENSE.txt
+          rm -f README.md
           rm -rf docs/
+          rm -rf tests/
+          rm -rf typings/
+          rm -f pyrightconfig.json
+          rm -f ruff.toml
           git add .
           git commit -m "Remove unwanted files"
         working-directory: ${{ github.event.repository.name }}
@@ -47,7 +52,7 @@ jobs:
       - name: Submit to Official Repository
         id: submit
         run: |
-          submit-addon -r repo-scripts -b matrix --pull-request ${{ github.event.repository.name }}
+          submit-addon -r repo-scripts -b omega --pull-request ${{ github.event.repository.name }}
         working-directory: ${{ github.event.repository.name }}
         env:
           GH_USERNAME: mikesilvo164

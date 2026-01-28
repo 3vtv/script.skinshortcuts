@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
     from .menu import Content
 
-    # Background group items can be: Background, nested BackgroundGroup, or Content reference
     BackgroundGroupContent = Union["Background", "BackgroundGroup", "Content"]
 
 
@@ -40,11 +39,16 @@ class BrowseSource:
 
     Used by browse/multi background types to provide multiple
     conditional starting paths for file browsing.
+
+    Attributes:
+        condition: Property condition (evaluated against item properties)
+        visible: Kodi visibility condition (evaluated at runtime)
     """
 
     label: str
     path: str  # Path to browse from, or "browse" for free file browser
     condition: str = ""
+    visible: str = ""
     icon: str = ""
 
 
@@ -62,12 +66,18 @@ class Background:
     sources: list[PlaylistSource] = field(default_factory=list)  # For playlist types
     browse_sources: list[BrowseSource] = field(default_factory=list)  # For browse/multi
 
+    @property
+    def type_name(self) -> str:
+        """Return normalized type name matching XML attribute values."""
+        return self.type.name.lower().replace("_", "-")
+
     def to_properties(self) -> dict[str, str]:
         """Convert to property dictionary for skin access."""
         return {
-            "background": self.path,
+            "background": self.name,
+            "backgroundPath": self.path,
             "backgroundLabel": self.label,
-            "backgroundType": self.type.name.lower(),
+            "backgroundType": self.type_name,
         }
 
 

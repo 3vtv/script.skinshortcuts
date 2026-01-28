@@ -12,22 +12,27 @@ from pathlib import Path
 from ..exceptions import TemplateConfigError
 from ..models.template import (
     BuildMode,
+    Expression,
     IncludeDefinition,
+    ItemsDefinition,
     ListItem,
     Preset,
+    PresetGroup,
+    PresetGroupChild,
+    PresetGroupReference,
     PresetReference,
     PresetValues,
     PropertyGroup,
     PropertyGroupReference,
     SubmenuTemplate,
     Template,
+    TemplateOutput,
     TemplateParam,
     TemplateProperty,
     TemplateSchema,
     TemplateVar,
     VariableDefinition,
     VariableGroup,
-    VariableGroupRef,
     VariableGroupReference,
     VariableReference,
 )
@@ -39,12 +44,14 @@ class TemplateLoader:
 
     def __init__(self, path: str | Path):
         self.path = Path(path)
-        self._expressions: dict[str, str] = {}
+        self._expressions: dict[str, Expression] = {}
         self._presets: dict[str, Preset] = {}
+        self._preset_groups: dict[str, PresetGroup] = {}
         self._property_groups: dict[str, PropertyGroup] = {}
         self._variable_definitions: dict[str, VariableDefinition] = {}
         self._variable_groups: dict[str, VariableGroup] = {}
         self._includes: dict[str, IncludeDefinition] = {}
+        self._items_templates: dict[str, ItemsDefinition] = {}
 
     def load(self) -> TemplateSchema:
         """Load and parse the template schema."""
@@ -55,9 +62,7 @@ class TemplateLoader:
             tree = ET.parse(str(self.path))
             root = tree.getroot()
         except ET.ParseError as e:
-            raise TemplateConfigError(
-                str(self.path), f"XML parse error: {e}", e.position[0]
-            ) from e
+            raise TemplateConfigError(str(self.path), f"XML parse error: {e}", e.position[0]) from e
         except Exception as e:
             raise TemplateConfigError(str(self.path), f"Failed to load file: {e}") from e
 
@@ -66,18 +71,23 @@ class TemplateLoader:
                 str(self.path), f"Root element must be <templates>, got <{root.tag}>"
             )
 
-        # Parse sectioned structure
         self._parse_expressions_section(root)
         self._parse_presets_section(root)
+        self._parse_preset_groups_section(root)
         self._parse_property_groups_section(root)
         self._parse_variables_section(root)
         self._parse_includes_section(root)
 
-        # Parse templates and submenus at root level
         templates = []
         for elem in root.findall("template"):
-            template = self._parse_template(elem)
-            templates.append(template)
+            items_name = (elem.get("items") or "").strip()
+            if items_name:
+                items_def = self._parse_items_template(elem, items_name)
+                if items_def:
+                    self._items_templates[items_name] = items_def
+            else:
+                template = self._parse_template(elem)
+                templates.append(template)
 
         submenus = []
         for elem in root.findall("submenu"):
@@ -89,8 +99,10 @@ class TemplateLoader:
             property_groups=self._property_groups,
             includes=self._includes,
             presets=self._presets,
+            preset_groups=self._preset_groups,
             variable_definitions=self._variable_definitions,
             variable_groups=self._variable_groups,
+            items_templates=self._items_templates,
             templates=templates,
             submenus=submenus,
         )
@@ -105,7 +117,8 @@ class TemplateLoader:
             if not name:
                 continue
             value = (elem.text or "").strip()
-            self._expressions[name] = value
+            nosuffix = (elem.get("nosuffix") or "").strip().lower() == "true"
+            self._expressions[name] = Expression(value=value, nosuffix=nosuffix)
 
     def _parse_presets_section(self, root: ET.Element) -> None:
         """Parse <presets> section."""
@@ -115,6 +128,50 @@ class TemplateLoader:
         for elem in section.findall("preset"):
             preset = self._parse_preset(elem)
             self._presets[preset.name] = preset
+
+    def _parse_preset_groups_section(self, root: ET.Element) -> None:
+        """Parse <presetGroups> section."""
+        section = root.find("presetGroups")
+        if section is None:
+            return
+        for elem in section.findall("presetGroup"):
+            group = self._parse_preset_group(elem)
+            if group:
+                self._preset_groups[group.name] = group
+
+    def _parse_preset_group(self, elem: ET.Element) -> PresetGroup | None:
+        """Parse a presetGroup element.
+
+        Children can be <preset content="name"/> or <values attr="val"/>.
+        First matching condition wins (document order).
+        """
+        name = (elem.get("name") or "").strip()
+        if not name:
+            return None
+
+        children = []
+        for child in elem:
+            if child.tag == "preset":
+                preset_name = (child.get("content") or "").strip()
+                if preset_name:
+                    condition = (child.get("condition") or "").strip()
+                    children.append(
+                        PresetGroupChild(
+                            preset_name=preset_name,
+                            condition=condition,
+                        )
+                    )
+            elif child.tag == "values":
+                condition = (child.get("condition") or "").strip()
+                values = {k: v for k, v in child.attrib.items() if k != "condition"}
+                children.append(
+                    PresetGroupChild(
+                        values=values,
+                        condition=condition,
+                    )
+                )
+
+        return PresetGroup(name=name, children=children)
 
     def _parse_property_groups_section(self, root: ET.Element) -> None:
         """Parse <propertyGroups> section."""
@@ -150,13 +207,11 @@ class TemplateLoader:
         if section is None:
             return
 
-        # Parse variable definitions
         for elem in section.findall("variable"):
             var_def = self._parse_variable_definition(elem)
             if var_def:
                 self._variable_definitions[var_def.name] = var_def
 
-        # Parse variable groups
         for elem in section.findall("variableGroup"):
             group = self._parse_variable_group(elem)
             if group:
@@ -174,18 +229,20 @@ class TemplateLoader:
             if ref:
                 references.append(ref)
 
-        # Parse nested variableGroup references
         group_refs = []
         for group_elem in elem.findall("variableGroup"):
-            group_name = (group_elem.get("name") or "").strip()
+            group_name = (group_elem.get("content") or "").strip()
             if group_name:
-                group_refs.append(VariableGroupRef(name=group_name))
+                group_refs.append(VariableGroupReference(name=group_name))
 
         return VariableGroup(name=name, references=references, group_refs=group_refs)
 
     def _parse_variable_reference(self, elem: ET.Element) -> VariableReference | None:
-        """Parse a variable reference within a variableGroup."""
-        name = (elem.get("name") or "").strip()
+        """Parse a variable reference within a variableGroup.
+
+        Uses content="" attribute (v4 syntax) for the reference name.
+        """
+        name = (elem.get("content") or "").strip()
         if not name:
             return None
         condition = (elem.get("condition") or "").strip()
@@ -201,7 +258,6 @@ class TemplateLoader:
             if not name:
                 continue
 
-            # Store the entire include element (preserves all children)
             self._includes[name] = IncludeDefinition(
                 name=name,
                 controls=copy.deepcopy(elem) if len(elem) > 0 else None,
@@ -215,9 +271,7 @@ class TemplateLoader:
         default = (elem.get("default") or "").strip()
         return TemplateParam(name=name, default=default)
 
-    def _parse_property(
-        self, elem: ET.Element, suffix: str = ""
-    ) -> TemplateProperty | None:
+    def _parse_property(self, elem: ET.Element, suffix: str = "") -> TemplateProperty | None:
         """Parse a property element."""
         name = (elem.get("name") or "").strip()
         if not name:
@@ -227,7 +281,6 @@ class TemplateLoader:
         from_source = (elem.get("from") or "").strip()
         condition = (elem.get("condition") or "").strip()
 
-        # Apply suffix transforms
         if suffix:
             if from_source:
                 from_source = apply_suffix_to_from(from_source, suffix)
@@ -241,9 +294,7 @@ class TemplateLoader:
             condition=condition,
         )
 
-    def _parse_var(
-        self, elem: ET.Element, suffix: str = ""
-    ) -> TemplateVar | None:
+    def _parse_var(self, elem: ET.Element, suffix: str = "") -> TemplateVar | None:
         """Parse a var element for internal template resolution."""
         name = (elem.get("name") or "").strip()
         if not name:
@@ -270,19 +321,31 @@ class TemplateLoader:
         rows = []
         for values_elem in elem.findall("values"):
             condition = (values_elem.get("condition") or "").strip()
-            values = {
-                k: v for k, v in values_elem.attrib.items() if k != "condition"
-            }
+            values = {k: v for k, v in values_elem.attrib.items() if k != "condition"}
             rows.append(PresetValues(condition=condition, values=values))
 
         return Preset(name=name, rows=rows)
 
     def _parse_template(self, elem: ET.Element) -> Template:
         """Parse a template element."""
+        outputs: list[TemplateOutput] = []
+        for output_elem in elem.findall("output"):
+            output_include = (output_elem.get("include") or "").strip()
+            if output_include:
+                outputs.append(
+                    TemplateOutput(
+                        include=output_include,
+                        id_prefix=(output_elem.get("idprefix") or "").strip(),
+                        suffix=(output_elem.get("suffix") or "").strip(),
+                    )
+                )
+
         include = (elem.get("include") or "").strip()
-        if not include:
+        id_prefix = (elem.get("idprefix") or "").strip()
+
+        if not outputs and not include:
             raise TemplateConfigError(
-                str(self.path), "Template missing include attribute"
+                str(self.path), "Template missing include attribute or output elements"
             )
 
         build_str = (elem.get("build") or "").strip().lower()
@@ -293,8 +356,8 @@ class TemplateLoader:
         else:
             build = BuildMode.MENU
 
-        id_prefix = (elem.get("idprefix") or "").strip()
         template_only = (elem.get("templateonly") or "").strip().lower()
+        menu = (elem.get("menu") or "").strip()
 
         conditions = []
         for cond_elem in elem.findall("condition"):
@@ -312,6 +375,7 @@ class TemplateLoader:
         vars_list = []
         property_groups = []
         preset_refs = []
+        preset_group_refs = []
         variable_groups = []
         variables = []
 
@@ -332,12 +396,15 @@ class TemplateLoader:
                 ref = self._parse_preset_ref(child)
                 if ref:
                     preset_refs.append(ref)
+            elif child.tag == "presetGroup":
+                ref = self._parse_preset_group_ref(child)
+                if ref:
+                    preset_group_refs.append(ref)
             elif child.tag == "variableGroup":
                 ref = self._parse_variable_group_ref(child)
                 if ref:
                     variable_groups.append(ref)
 
-        # Parse <variables> section inside template (inline definitions)
         variables_elem = elem.find("variables")
         if variables_elem is not None:
             for var_elem in variables_elem.findall("variable"):
@@ -358,12 +425,15 @@ class TemplateLoader:
             build=build,
             id_prefix=id_prefix,
             template_only=template_only,
+            menu=menu,
+            outputs=outputs,
             conditions=conditions,
             params=params,
             properties=properties,
             vars=vars_list,
             property_groups=property_groups,
             preset_refs=preset_refs,
+            preset_group_refs=preset_group_refs,
             list_items=list_items,
             controls=copy.deepcopy(controls) if controls is not None else None,
             variables=variables,
@@ -410,9 +480,72 @@ class TemplateLoader:
             controls=copy.deepcopy(controls) if controls is not None else None,
         )
 
+    def _parse_items_template(self, elem: ET.Element, name: str) -> ItemsDefinition | None:
+        """Parse <template items="X"> into an ItemsDefinition.
+
+        Syntax:
+            <template items="widgets" source="widgets" filter="widgetPath">
+                <condition>widgetType=custom</condition>
+                <property name="id" from="index" />
+                <var name="style">...</var>
+                <preset content="layoutDims" />
+                <propertyGroup content="widgetProps" />
+                <controls>
+                    <control type="group">...</control>
+                </controls>
+            </template>
+        """
+        source = (elem.get("source") or "").strip()
+        filter_cond = (elem.get("filter") or "").strip()
+
+        condition = ""
+        cond_elem = elem.find("condition")
+        if cond_elem is not None:
+            condition = (cond_elem.text or "").strip()
+
+        properties = []
+        vars_list = []
+        preset_refs = []
+        property_groups = []
+
+        for child in elem:
+            if child.tag == "property":
+                prop = self._parse_property(child)
+                if prop:
+                    properties.append(prop)
+            elif child.tag == "var":
+                var = self._parse_var(child)
+                if var:
+                    vars_list.append(var)
+            elif child.tag == "preset":
+                ref = self._parse_preset_ref(child)
+                if ref:
+                    preset_refs.append(ref)
+            elif child.tag == "propertyGroup":
+                ref = self._parse_property_group_ref(child)
+                if ref:
+                    property_groups.append(ref)
+
+        controls = elem.find("controls")
+
+        return ItemsDefinition(
+            name=name,
+            source=source,
+            condition=condition,
+            filter=filter_cond,
+            properties=properties,
+            vars=vars_list,
+            preset_refs=preset_refs,
+            property_groups=property_groups,
+            controls=copy.deepcopy(controls) if controls is not None else None,
+        )
+
     def _parse_property_group_ref(self, elem: ET.Element) -> PropertyGroupReference | None:
-        """Parse a property group reference element."""
-        name = (elem.get("name") or "").strip()
+        """Parse a property group reference element.
+
+        Uses content="" attribute (v4 syntax) for the reference name.
+        """
+        name = (elem.get("content") or "").strip()
         if not name:
             return None
 
@@ -426,8 +559,11 @@ class TemplateLoader:
         )
 
     def _parse_preset_ref(self, elem: ET.Element) -> PresetReference | None:
-        """Parse a preset reference element for direct property resolution."""
-        name = (elem.get("name") or "").strip()
+        """Parse a preset reference element for direct property resolution.
+
+        Uses content="" attribute (v4 syntax) for the reference name.
+        """
+        name = (elem.get("content") or "").strip()
         if not name:
             return None
 
@@ -440,9 +576,30 @@ class TemplateLoader:
             condition=condition,
         )
 
+    def _parse_preset_group_ref(self, elem: ET.Element) -> PresetGroupReference | None:
+        """Parse a presetGroup reference element in a template.
+
+        Uses content="" attribute (v4 syntax) for the reference name.
+        """
+        name = (elem.get("content") or "").strip()
+        if not name:
+            return None
+
+        suffix = (elem.get("suffix") or "").strip()
+        condition = (elem.get("condition") or "").strip()
+
+        return PresetGroupReference(
+            name=name,
+            suffix=suffix,
+            condition=condition,
+        )
+
     def _parse_variable_group_ref(self, elem: ET.Element) -> VariableGroupReference | None:
-        """Parse a variableGroup reference element in a template."""
-        name = (elem.get("name") or "").strip()
+        """Parse a variableGroup reference element in a template.
+
+        Uses content="" attribute (v4 syntax) for the reference name.
+        """
+        name = (elem.get("content") or "").strip()
         if not name:
             return None
 

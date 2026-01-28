@@ -1,103 +1,59 @@
 # models/background.py
 
 **Path:** `resources/lib/skinshortcuts/models/background.py`
-**Lines:** 62
-**Purpose:** Dataclass models for backgrounds and background selection system.
+**Purpose:** Dataclasses for backgrounds and background groupings.
 
----
+***
 
-## Overview
-
-Defines the Background model and supporting types for the background picker system.
-
----
-
-## Enums
-
-### BackgroundType (line 9)
-Enum defining available background types.
+## BackgroundType Enum
 
 | Value | Description |
 |-------|-------------|
-| `STATIC` | Single static image path |
-| `PLAYLIST` | Slideshow from playlist sources |
+| `STATIC` | Single static image |
 | `BROWSE` | User browses for single image |
-| `MULTI` | User browses for multiple images |
-| `PROPERTY` | Path from a skin property |
-| `LIVE` | Live/dynamic background |
-| `LIVE_PLAYLIST` | Live background from playlist |
+| `MULTI` | User browses for folder |
+| `PLAYLIST` | Slideshow from playlist |
+| `PROPERTY` | Path from Kodi property |
+| `LIVE` | Dynamic library content |
+| `LIVE_PLAYLIST` | Dynamic from user-selected playlist |
 
-**Used by:** Background.type, loaders/background.py, dialog.py
-
----
+***
 
 ## Classes
 
-### PlaylistSource (line 20)
-A source path for playlist scanning.
+### Background
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `label` | str | required | Display label |
-| `path` | str | required | Path to scan for images |
-| `icon` | str | "DefaultPlaylist.png" | Icon for this source |
+| Field | Type | Description |
+|-------|------|-------------|
+| `name`, `label` | str | Identifier and display |
+| `path` | str | Image path (optional for browse/multi/playlist) |
+| `type` | BackgroundType | Background type |
+| `icon`, `condition`, `visible` | str | Display/filtering |
+| `sources` | list[PlaylistSource] | For playlist types |
+| `browse_sources` | list[BrowseSource] | For browse/multi types |
 
-**Used by:** Background.sources, dialog.py (_pick_playlist)
+**Methods:** `to_properties()` - Returns dict with background, backgroundPath, backgroundLabel, backgroundType
 
----
+### BackgroundGroup
 
-### BrowseSource (line 29)
-A source path for browse dialogs.
+| Field | Type | Description |
+|-------|------|-------------|
+| `name`, `label` | str | Identifier and display |
+| `icon`, `condition`, `visible` | str | Display/filtering |
+| `items` | list | Child Backgrounds, BackgroundGroups, or Content |
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `label` | str | required | Display label |
-| `path` | str | required | Browse starting path, or "browse" for free browser |
-| `condition` | str | "" | Visibility condition |
-| `icon` | str | "" | Icon for this source |
+### BackgroundConfig
 
-**Used by:** Background.browse_sources, dialog.py
+| Field | Type | Description |
+|-------|------|-------------|
+| `backgrounds` | list[Background] | All backgrounds (flat) |
+| `groupings` | list | Picker structure |
 
----
+***
 
-### Background (line 43)
-A background assignable to menu items.
+## Source Classes
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | str | required | Unique identifier |
-| `label` | str | required | Display label |
-| `path` | str | "" | Static path (optional for browse/playlist types) |
-| `type` | BackgroundType | STATIC | Background type |
-| `icon` | str | "" | Icon path |
-| `condition` | str | "" | Visibility condition |
-| `sources` | list[PlaylistSource] | [] | Sources for playlist types |
-| `browse_sources` | list[BrowseSource] | [] | Sources for browse/multi types |
-
-**Methods:**
-- `to_properties()` → dict[str,str] - Convert to skin property dict
-
-**Property output example:**
-```python
-{
-    "background": "/path/to/image.jpg",
-    "backgroundLabel": "My Background",
-    "backgroundType": "static"
-}
-```
-
-**Used by:** config.py, dialog.py (background picker), loaders/background.py
-
----
-
-## Dead Code Analysis
-
-All classes appear to be in active use.
-
----
-
-## Test Candidates
-
-1. `BackgroundType` enum values and names
-2. `Background.to_properties()` output format
-3. `Background.to_properties()` type name lowercase conversion
+| Class | Fields | Description |
+|-------|--------|-------------|
+| `PlaylistSource` | label, path, icon | Source for playlist scanning |
+| `BrowseSource` | label, path, condition, visible, icon | Source for browse dialogs |

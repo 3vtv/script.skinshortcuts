@@ -6,9 +6,9 @@ Configuration files and their purposes.
 
 ## Table of Contents
 
-- [Configuration Files](#configuration-files)
-- [Generated Output](#generated-output)
-- [User Data](#user-data)
+* [Configuration Files](#configuration-files)
+* [Generated Output](#generated-output)
+* [User Data](#user-data)
 
 ---
 
@@ -23,7 +23,8 @@ skin.name/
     ├── widgets.xml
     ├── backgrounds.xml
     ├── properties.xml
-    └── templates.xml
+    ├── templates.xml
+    └── views.xml
 ```
 
 ### menus.xml
@@ -92,6 +93,17 @@ See [Properties](properties.md) for full reference.
 
 See [Templates](templates.md) for full reference.
 
+### views.xml
+
+**Optional.** Defines view locking configuration.
+
+| Section | Purpose |
+|---------|---------|
+| `<view>` | View definitions |
+| `<rules>` | Content type rules |
+
+See [Views](views.md) for full reference.
+
 ---
 
 ## Generated Output
@@ -124,6 +136,8 @@ skin.name/
 </control>
 ```
 
+> **See also:** [Templates](templates.md) for controlling include output structure
+
 ---
 
 ## User Data
@@ -154,6 +168,10 @@ JSON file containing menu overrides:
       ],
       "removed": ["tvshows"]
     }
+  },
+  "views": {
+    "library": { "movies": "51" },
+    "plugins": { "movies": "50" }
   }
 }
 ```
@@ -170,7 +188,7 @@ Or programmatically:
 
 ```python
 # Delete: userdata/addon_data/script.skinshortcuts/skin.name.userdata.json
-# Then: RunScript(script.skinshortcuts,type=buildxml&force=true)
+# Then: RunScript(script.skinshortcuts,type=buildxml,force=true)
 ```
 
 ---
@@ -181,7 +199,12 @@ Or programmatically:
 2. Load `widgets.xml` - widget definitions and groupings
 3. Load `backgrounds.xml` - background options
 4. Load `properties.xml` - property schemas
-5. Load userdata JSON - merge user customizations
-6. Load `templates.xml` - for include generation
+5. Load `views.xml` - view locking rules
+6. Load userdata JSON - merge user customizations
+7. Load `templates.xml` - for include generation
 
 Configuration files are in the skin's `shortcuts/` folder. Userdata is skin-specific and stored separately.
+
+---
+
+[↑ Top](#file-overview) · [Skinning Docs](index.md)

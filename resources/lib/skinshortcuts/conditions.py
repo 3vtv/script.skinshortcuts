@@ -1,22 +1,55 @@
 """Condition evaluation utilities for Skin Shortcuts.
 
 Evaluates property conditions using a simple expression language:
-- Equality: propertyName=value
-- Contains: propertyName~value
-- AND: condition1 + condition2
-- OR: condition1 | condition2
-- NOT: !condition or ![grouped condition]
+
+Operators (symbol and keyword forms):
+- Equality: propertyName=value or propertyName EQUALS value
+- Contains: propertyName~value or propertyName CONTAINS value
+- Empty check: propertyName EMPTY
+- List membership: propertyName IN value1,value2,value3
+- AND: condition1 + condition2 or condition1 AND condition2
+- OR: condition1 | condition2 or condition1 OR condition2
+- NOT: !condition or NOT condition
 - Grouping: [condition1 | condition2]
 - Compact OR: propertyName=value1 | value2 | value3
+
+Compact OR Notes:
+    The property name cascades from the most recent full condition:
+        prop=a | other=b | c  ->  prop=a | other=b | other=c
+
+Negation Precedence:
+    Negation applies to the adjacent condition only:
+        !prop=a | b  ->  (!prop=a) | (prop=b)
+    For group negation, use brackets:
+        ![prop=a | b]  ->  !(prop=a | prop=b)
 """
 
 from __future__ import annotations
 
 import re
 
-# Pre-compiled regex patterns for condition evaluation
 _OR_SPLIT_PATTERN = re.compile(r"\s*\|\s*")
 _CONDITION_MATCH_PATTERN = re.compile(r"^(!?)([a-zA-Z_][a-zA-Z0-9_\.]*)(=|~)(.*)$")
+
+# Keyword to symbol mappings (applied with word boundaries)
+_KEYWORD_REPLACEMENTS = [
+    (re.compile(r"\bAND\b"), "+"),
+    (re.compile(r"\bOR\b"), "|"),
+    (re.compile(r"\bNOT\b"), "!"),
+    (re.compile(r"\bEQUALS\b"), "="),
+    (re.compile(r"\bCONTAINS\b"), "~"),
+]
+
+
+def _normalize_keywords(condition: str) -> str:
+    """Convert keyword operators to symbol equivalents.
+
+    Converts: AND->+, OR->|, NOT->!, EQUALS->=, CONTAINS->~
+    Uses word boundaries to avoid replacing within values.
+    """
+    for pattern, replacement in _KEYWORD_REPLACEMENTS:
+        condition = pattern.sub(replacement, condition)
+    return condition
 
 
 def expand_compact_or(condition: str) -> str:
@@ -130,8 +163,27 @@ def evaluate_condition(condition: str, properties: dict[str, str]) -> bool:
     if not condition:
         return True
 
-    expanded = expand_compact_or(condition)
-    return _evaluate_expanded(expanded, properties)
+    # Convert keywords to symbols (AND->+, OR->|, etc.)
+    condition = _normalize_keywords(condition)
+
+    if "|" in condition:
+        condition = expand_compact_or(condition)
+    return _evaluate_expanded(condition, properties)
+
+
+def _is_wrapped_in_brackets(text: str) -> bool:
+    """Check if text is wrapped in matching brackets (not just starts/ends with them)."""
+    if not text.startswith("[") or not text.endswith("]"):
+        return False
+    depth = 0
+    for i, char in enumerate(text):
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0 and i < len(text) - 1:
+                return False
+    return depth == 0
 
 
 def _evaluate_expanded(condition: str, properties: dict[str, str]) -> bool:
@@ -140,15 +192,10 @@ def _evaluate_expanded(condition: str, properties: dict[str, str]) -> bool:
     if not condition:
         return True
 
-    if condition.startswith("!"):
-        inner = condition[1:].strip()
-        if inner.startswith("[") and inner.endswith("]"):
-            return not _evaluate_expanded(inner[1:-1], properties)
-        return not _evaluate_single(inner, properties)
-
-    if condition.startswith("[") and condition.endswith("]"):
+    if _is_wrapped_in_brackets(condition):
         return _evaluate_expanded(condition[1:-1], properties)
 
+    # Split AND/OR before negation: !a + b = (!a) + b, not !(a + b)
     and_parts = _split_preserving_brackets(condition, "+")
     if len(and_parts) > 1:
         return all(_evaluate_expanded(part.strip(), properties) for part in and_parts)
@@ -156,6 +203,12 @@ def _evaluate_expanded(condition: str, properties: dict[str, str]) -> bool:
     or_parts = _split_preserving_brackets(condition, "|")
     if len(or_parts) > 1:
         return any(_evaluate_expanded(part.strip(), properties) for part in or_parts)
+
+    if condition.startswith("!"):
+        inner = condition[1:].strip()
+        if _is_wrapped_in_brackets(inner):
+            return not _evaluate_expanded(inner[1:-1], properties)
+        return not _evaluate_single(inner, properties)
 
     return _evaluate_single(condition, properties)
 
@@ -169,15 +222,39 @@ def _evaluate_single(condition: str, properties: dict[str, str]) -> bool:
         negated = True
         condition = condition[1:].strip()
 
-    if condition.startswith("[") and condition.endswith("]"):
+    if _is_wrapped_in_brackets(condition):
         result = _evaluate_expanded(condition[1:-1], properties)
+        return not result if negated else result
+
+    # EMPTY operator: propertyName EMPTY
+    if condition.endswith(" EMPTY"):
+        prop_name = condition[:-6].strip()
+        actual = properties.get(prop_name, "")
+        result = actual == ""
+        return not result if negated else result
+
+    # IN operator: propertyName IN value1,value2,value3
+    if " IN " in condition:
+        prop_name, values_str = condition.split(" IN ", 1)
+        prop_name = prop_name.strip()
+        values_str = values_str.strip()
+        actual = properties.get(prop_name, "")
+        values = [v.strip() for v in values_str.split(",")]
+        result = actual in values
         return not result if negated else result
 
     if "=" in condition:
         prop_name, value = condition.split("=", 1)
         prop_name = prop_name.strip()
         value = value.strip()
-        actual = properties.get(prop_name, "")
+        # Check if left side is a property name or a literal value
+        if prop_name in properties:
+            actual = properties[prop_name]
+        elif prop_name.lower() in ("true", "false"):
+            # Literal boolean comparison (e.g., from $IF after $PROPERTY substitution)
+            actual = prop_name
+        else:
+            actual = ""
         result = actual == value
         return not result if negated else result
 
@@ -189,4 +266,15 @@ def _evaluate_single(condition: str, properties: dict[str, str]) -> bool:
         result = value in actual
         return not result if negated else result
 
-    return not negated
+    # Literal boolean value (e.g., from $PROPERTY substitution)
+    if condition.lower() in ("true", "false"):
+        result = condition.lower() == "true"
+        return not result if negated else result
+
+    # Property name only: truthy if non-empty (but "false" string is falsy)
+    val = properties.get(condition, "")
+    if val.lower() in ("true", "false"):
+        result = val.lower() == "true"
+    else:
+        result = bool(val)
+    return not result if negated else result

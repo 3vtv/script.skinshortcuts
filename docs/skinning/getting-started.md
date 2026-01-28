@@ -6,14 +6,14 @@ This guide walks through integrating Skin Shortcuts into your skin.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [File Setup](#file-setup)
-- [Basic Menu](#basic-menu)
-- [Opening the Dialog](#opening-the-dialog)
-- [Displaying the Menu](#displaying-the-menu)
-- [Building Includes](#building-includes)
-- [Adding Widgets](#adding-widgets)
-- [Next Steps](#next-steps)
+* [Overview](#overview)
+* [File Setup](#file-setup)
+* [Basic Menu](#basic-menu)
+* [Opening the Dialog](#opening-the-dialog)
+* [Displaying the Menu](#displaying-the-menu)
+* [Building Includes](#building-includes)
+* [Adding Widgets](#adding-widgets)
+* [Next Steps](#next-steps)
 
 ---
 
@@ -39,10 +39,13 @@ skin.name/
     ├── widgets.xml       # Optional: Widget definitions
     ├── backgrounds.xml   # Optional: Background options
     ├── properties.xml    # Optional: Custom properties
-    └── templates.xml     # Optional: Output templates
+    ├── templates.xml     # Optional: Output templates
+    └── views.xml         # Optional: View locking
 ```
 
 All files except `menus.xml` are optional. Start with just `menus.xml` and add others as needed.
+
+> **See also:** [File Overview](files.md) for detailed file descriptions
 
 ---
 
@@ -75,6 +78,8 @@ Create `shortcuts/menus.xml`:
 
 This defines a menu named `mainmenu` with three items.
 
+> **See also:** [Menu Configuration](menus.md) for full element reference
+
 ---
 
 ## Opening the Dialog
@@ -84,7 +89,7 @@ Add a button to open the management dialog:
 ```xml
 <control type="button">
   <label>Edit Menu</label>
-  <onclick>RunScript(script.skinshortcuts,type=manage&amp;menu=mainmenu)</onclick>
+  <onclick>RunScript(script.skinshortcuts,type=manage,menu=mainmenu)</onclick>
 </control>
 ```
 
@@ -95,6 +100,8 @@ Add a button to open the management dialog:
 | `type` | Yes | `manage` to open the management dialog |
 | `menu` | Yes | Menu name to edit (e.g., `mainmenu`) |
 | `path` | No | Custom shortcuts path (defaults to `special://skin/shortcuts/`) |
+
+> **See also:** [Management Dialog](management-dialog.md) for dialog controls and properties
 
 ---
 
@@ -124,6 +131,8 @@ Use the generated include in your skin:
 **Include naming:** `skinshortcuts-{menu_name}`
 
 Each include generates `<item>` elements with properties accessible via `ListItem.Property(name)`.
+
+> **See also:** [Built-in Properties](builtin-properties.md) for available properties
 
 ---
 
@@ -170,9 +179,9 @@ To let users assign widgets to menu items:
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <properties>
-  <property name="widget" type="widget"/>
+  <property name="widget" type="widget" />
   <buttons>
-    <button id="309" property="widget" type="widget"/>
+    <button id="309" property="widget" type="widget" />
   </buttons>
 </properties>
 ```
@@ -185,7 +194,7 @@ To let users assign widgets to menu items:
 </control>
 ```
 
-Button IDs are configured in `properties.xml`. See [Properties](properties.md) for full configuration.
+Button IDs are configured in `properties.xml`.
 
 ### 4. Display widget content:
 
@@ -197,12 +206,8 @@ Button IDs are configured in `properties.xml`. See [Properties](properties.md) f
 </control>
 ```
 
+> **See also:** [Widget Configuration](widgets.md) and [Property Schemas](properties.md)
+
 ---
 
-## Next Steps
-
-- [Menus](menus.md) - Full menu configuration reference
-- [Widgets](widgets.md) - Widget definitions and picker groupings
-- [Backgrounds](backgrounds.md) - Background options
-- [Properties](properties.md) - Custom property schemas
-- [Management Dialog](management-dialog.md) - Dialog control IDs and properties
+[↑ Top](#getting-started) · [Skinning Docs](index.md)

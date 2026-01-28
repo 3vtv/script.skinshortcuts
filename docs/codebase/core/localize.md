@@ -1,67 +1,27 @@
 # localize.py
 
 **Path:** `resources/lib/skinshortcuts/localize.py`
-**Lines:** 61
-**Purpose:** Label localization utilities for resolving Kodi string IDs.
+**Purpose:** Label localization utilities.
 
----
-
-## Overview
-
-Provides label resolution that handles various Kodi localization formats. Works both inside and outside Kodi (returns original string when not in Kodi).
-
----
-
-## Constants
-
-### ADDON_PATTERN (line 16)
-Regex pattern for `$ADDON[addon.id #####]` format.
-
-Pattern: `r"\$ADDON\[([^\s\]]+)\s+(\d+)\]"`
-
-Captures: addon ID and string ID
-
----
+***
 
 ## Functions
 
-### resolve_label(label) → str (line 19)
-Resolve a label string to its localized value.
+### LANGUAGE(string_id) → str
 
-**Parameters:**
-- `label` - String to resolve
+Get localized string from this addon's strings.po.
 
-**Returns:** Localized string or original if resolution fails
+### resolve_label(label) → str
 
-**Handled formats:**
+Resolve label to localized value.
 
 | Format | Example | Resolution |
 |--------|---------|------------|
-| `$LOCALIZE[#####]` | `$LOCALIZE[20000]` | `xbmc.getInfoLabel()` |
-| `$NUMBER[#####]` | `$NUMBER[10]` | `xbmc.getInfoLabel()` |
-| `$ADDON[addon.id #####]` | `$ADDON[script.skinshortcuts 32001]` | `xbmcaddon.Addon().getLocalizedString()` |
-| `#####` (plain number) | `20000` | `$LOCALIZE[#####]` via `getInfoLabel()` |
+| `$LOCALIZE[#####]` | `$LOCALIZE[20000]` | xbmc.getInfoLabel() |
+| `$NUMBER[#####]` | `$NUMBER[10]` | xbmc.getInfoLabel() |
+| `$ADDON[addon.id #####]` | `$ADDON[script.skinshortcuts 32001]` | Addon.getLocalizedString() |
+| `32000-32999` | `32001` | Script string |
+| `#####` | `20000` | $LOCALIZE via getInfoLabel() |
 | Plain text | `Movies` | Returned as-is |
 
-**Behavior outside Kodi:**
-Returns the original label unchanged (IN_KODI = False).
-
-**Used by:** dialog.py (displaying labels in UI)
-
----
-
-## Dead Code Analysis
-
-All code appears to be in active use.
-
----
-
-## Test Candidates
-
-1. `resolve_label()` with `$LOCALIZE[...]` format
-2. `resolve_label()` with `$ADDON[...]` format
-3. `resolve_label()` with plain number
-4. `resolve_label()` with plain text
-5. `resolve_label()` when not in Kodi environment
-
-**Note:** Most tests require mocking Kodi APIs.
+Returns original label when not in Kodi.

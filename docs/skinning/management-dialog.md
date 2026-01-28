@@ -6,13 +6,13 @@ The management dialog (`script-skinshortcuts.xml`) provides the UI for editing m
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Dialog XML](#dialog-xml)
-- [Control IDs](#control-ids)
-- [Window Properties](#window-properties)
-- [ListItem Properties](#listitem-properties)
-- [Subdialogs](#subdialogs)
-- [Script Commands](#script-commands)
+* [Overview](#overview)
+* [Dialog XML](#dialog-xml)
+* [Control IDs](#control-ids)
+* [Window Properties](#window-properties)
+* [ListItem Properties](#listitem-properties)
+* [Subdialogs](#subdialogs)
+* [Script Commands](#script-commands)
 
 ---
 
@@ -73,6 +73,14 @@ Create `script-skinshortcuts.xml` in your skin's XML folder:
 | ID | Function |
 |----|----------|
 | `211` | Menu items list (required) |
+| `212` | Subdialog context list (optional) |
+
+Control 212 is a single-item list that mirrors the currently selected item from 211. Use it in subdialogs to read item properties without conflicting with the main list:
+
+```xml
+<!-- In subdialog mode, read from 212 instead of 211 -->
+<label>$INFO[Container(212).ListItem.Property(widgetLabel)]</label>
+```
 
 ### Built-in Buttons
 
@@ -104,6 +112,8 @@ All property buttons (widget, background, custom options) are configured in `pro
 
 These are not built-in - you must define button mappings in your `properties.xml`.
 
+> **See also:** [Properties](properties.md#button-mappings) for configuring property buttons
+
 ---
 
 ## Window Properties
@@ -114,13 +124,15 @@ Properties set on the dialog window for conditional visibility:
 
 | Property | Description |
 |----------|-------------|
-| `groupname` | Current menu ID (e.g., `mainmenu`) |
-| `allowWidgets` | `true` or `false` |
-| `allowBackgrounds` | `true` or `false` |
-| `allowSubmenus` | `true` or `false` |
+| `menuname` | Current menu ID (e.g., `mainmenu`) |
+| `disableWidgets` | `true` if disabled (empty if allowed) |
+| `disableBackgrounds` | `true` if disabled (empty if allowed) |
+| `disableSubmenus` | `true` if disabled (empty if allowed) |
 | `skinshortcuts-hasdeleted` | `true` if deleted items exist |
 
-### Subdialog Mode
+### Subdialog Mode (Home Window)
+
+These properties are set on the **Home window** (not the dialog) so they remain accessible when native dialogs (like DialogSelect) are open:
 
 | Property | Description |
 |----------|-------------|
@@ -130,9 +142,14 @@ Properties set on the dialog window for conditional visibility:
 ### Usage
 
 ```xml
-<visible>String.IsEqual(Window.Property(allowWidgets),true)</visible>
-<visible>String.IsEmpty(Window.Property(skinshortcuts-dialog))</visible>
-<visible>String.IsEqual(Window.Property(skinshortcuts-dialog),widget1)</visible>
+<!-- Menu context properties (on dialog window) -->
+<!-- Show widget button only if widgets are allowed (not disabled) -->
+<visible>String.IsEmpty(Window.Property(disableWidgets))</visible>
+
+<!-- Subdialog properties (on Home window) -->
+<visible>String.IsEmpty(Window(Home).Property(skinshortcuts-dialog))</visible>
+<visible>String.IsEqual(Window(Home).Property(skinshortcuts-dialog),widget1)</visible>
+<visible>String.IsEqual(Window(Home).Property(skinshortcuts-suffix),.2)</visible>
 ```
 
 ---
@@ -182,6 +199,8 @@ Properties available on items in the menu list (control 211):
 | Property | Description |
 |----------|-------------|
 | `ListItem.Property(isResettable)` | `true` if modified from default |
+| `ListItem.Property(skinshortcuts-isRequired)` | `True` if item cannot be deleted/disabled |
+| `ListItem.Property(skinshortcuts-isProtected)` | `True` if item has protection rules |
 
 ### Custom Properties
 
@@ -193,6 +212,8 @@ Any property defined in `properties.xml`:
 ```
 
 Properties with options also get a `{name}Label` property with the resolved label.
+
+> **See also:** [Built-in Properties](builtin-properties.md) for properties in generated includes
 
 ---
 
@@ -206,9 +227,9 @@ In `menus.xml`:
 
 ```xml
 <dialogs>
-  <subdialog buttonID="800" mode="widget1" setfocus="309"/>
+  <subdialog buttonID="800" mode="widget1" setfocus="309" />
   <subdialog buttonID="801" mode="widget2" setfocus="309" suffix=".2">
-    <onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2"/>
+    <onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2" />
   </subdialog>
 </dialogs>
 ```
@@ -216,35 +237,37 @@ In `menus.xml`:
 ### Dialog Behavior
 
 When button 800 is clicked:
-1. `Window.Property(skinshortcuts-dialog)` = `widget1`
+
+1. `Window(Home).Property(skinshortcuts-dialog)` = `widget1`
 2. Focus moves to control 309
 3. UI updates to show widget 1 controls
 
 When button 801 is clicked:
-1. `Window.Property(skinshortcuts-dialog)` = `widget2`
-2. `Window.Property(skinshortcuts-suffix)` = `.2`
+
+1. `Window(Home).Property(skinshortcuts-dialog)` = `widget2`
+2. `Window(Home).Property(skinshortcuts-suffix)` = `.2`
 3. Property reads/writes use `.2` suffix (e.g., `widgetPath.2`)
 
 ### Skin Layout
 
-Use visibility conditions to show different controls:
+Use visibility conditions to show different controls. Note that subdialog properties are on the Home window:
 
 ```xml
 <!-- Main dialog controls -->
 <control type="group">
-  <visible>String.IsEmpty(Window.Property(skinshortcuts-dialog))</visible>
+  <visible>String.IsEmpty(Window(Home).Property(skinshortcuts-dialog))</visible>
   <!-- Main menu editing controls -->
 </control>
 
 <!-- Widget 1 subdialog controls -->
 <control type="group">
-  <visible>String.IsEqual(Window.Property(skinshortcuts-dialog),widget1)</visible>
+  <visible>String.IsEqual(Window(Home).Property(skinshortcuts-dialog),widget1)</visible>
   <!-- Widget editing controls -->
 </control>
 
 <!-- Widget 2 subdialog controls -->
 <control type="group">
-  <visible>String.IsEqual(Window.Property(skinshortcuts-dialog),widget2)</visible>
+  <visible>String.IsEqual(Window(Home).Property(skinshortcuts-dialog),widget2)</visible>
   <!-- Widget editing controls (same layout, different suffix) -->
 </control>
 ```
@@ -254,11 +277,11 @@ Use visibility conditions to show different controls:
 Execute actions when subdialog closes:
 
 ```xml
-<onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2"/>
+<onclose condition="widgetType.2=custom" action="menu" menu="{item}.customwidget.2" />
 ```
 
-- `{item}` is replaced with current item name
-- Opens item editor for custom widget menu
+* `{item}` is replaced with current item name
+* Opens item editor for custom widget menu
 
 ---
 
@@ -267,7 +290,7 @@ Execute actions when subdialog closes:
 ### Open Management Dialog
 
 ```xml
-<onclick>RunScript(script.skinshortcuts,type=manage&amp;menu=mainmenu)</onclick>
+<onclick>RunScript(script.skinshortcuts,type=manage,menu=mainmenu)</onclick>
 ```
 
 | Parameter | Required | Description |
@@ -280,7 +303,7 @@ Execute actions when subdialog closes:
 
 ```xml
 <onclick>RunScript(script.skinshortcuts,type=buildxml)</onclick>
-<onclick>RunScript(script.skinshortcuts,type=buildxml&amp;force=true)</onclick>
+<onclick>RunScript(script.skinshortcuts,type=buildxml,force=true)</onclick>
 ```
 
 | Parameter | Description |
@@ -290,25 +313,75 @@ Execute actions when subdialog closes:
 | `path` | Custom shortcuts path |
 | `output` | Custom output path |
 
-### Reset All Menus
+### Reset All
 
 ```xml
 <onclick>RunScript(script.skinshortcuts,type=resetall)</onclick>
 ```
 
-Prompts for confirmation, then deletes userdata and rebuilds.
+Prompts for confirmation, then deletes all userdata (menus and views) and rebuilds.
 
-### Clear Custom Menu
+### Reset Menus Only
 
 ```xml
-<onclick>RunScript(script.skinshortcuts,type=clear&amp;menu=movies.customwidget&amp;property=widget)</onclick>
+<onclick>RunScript(script.skinshortcuts,type=resetmenus)</onclick>
+```
+
+Prompts for confirmation, resets all menus to defaults but preserves view selections.
+
+### Reset Views Only
+
+```xml
+<onclick>RunScript(script.skinshortcuts,type=resetviews)</onclick>
+```
+
+Prompts for confirmation, resets all view selections to defaults but preserves menu customizations.
+
+### Reset Single Menu
+
+```xml
+<onclick>RunScript(script.skinshortcuts,type=reset,menu=mainmenu)</onclick>
+```
+
+Resets a specific menu to skin defaults. Does not prompt for confirmation.
+
+| Parameter | Description |
+|-----------|-------------|
+| `type` | `reset` |
+| `menu` | Menu ID to reset |
+| `submenus` | `true` to also reset all submenus |
+| `path` | Custom shortcuts path |
+
+### Reset Menu and Submenus
+
+```xml
+<onclick>RunScript(script.skinshortcuts,type=reset,menu=mainmenu,submenus=true)</onclick>
+```
+
+Resets a menu and all submenus referenced by item `submenu` properties (recursive).
+
+### Reset All Submenus
+
+```xml
+<onclick>RunScript(script.skinshortcuts,type=resetsubmenus)</onclick>
+```
+
+Resets all submenus (menus defined with `<submenu>` tag) without affecting top-level menus.
+
+### Clear Custom Widget
+
+```xml
+<onclick>RunScript(script.skinshortcuts,type=clear,menu=mainmenu,item=movies,property=widget)</onclick>
+<onclick>RunScript(script.skinshortcuts,type=clear,menu=mainmenu,item=movies,suffix=.2,property=widget)</onclick>
 ```
 
 | Parameter | Description |
 |-----------|-------------|
 | `type` | `clear` |
-| `menu` | Custom menu name to clear |
-| `property` | Property to clear on parent item |
+| `menu` | Parent menu ID (e.g., `mainmenu`) |
+| `item` | Item ID to clear custom widget from |
+| `suffix` | Widget slot suffix (e.g., `.2` for second slot) |
+| `property` | Property prefix to clear (e.g., `widget`) |
 
 ---
 
@@ -322,3 +395,7 @@ Prompts for confirmation, then deletes userdata and rebuilds.
 6. Script saves changes and closes dialog
 7. Script rebuilds includes if changes were made
 8. Skin reloads to apply new includes
+
+---
+
+[↑ Top](#management-dialog) · [Skinning Docs](index.md)

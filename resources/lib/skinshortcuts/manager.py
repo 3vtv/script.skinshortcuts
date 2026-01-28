@@ -36,11 +36,9 @@ class MenuManager:
         self.shortcuts_path = Path(shortcuts_path)
         self.userdata_path = userdata_path
 
-        # Load config with user customizations
         self.config = SkinConfig.load(shortcuts_path, load_user=True, userdata_path=userdata_path)
 
-        # Working copy: deep copy of merged menus (defaults + userdata)
-        # All edits happen here, diffed against defaults on save
+        # Working copy of merged menus - all edits happen here, diffed against defaults on save
         self.working: dict[str, Menu] = {
             menu.name: copy.deepcopy(menu) for menu in self.config.menus
         }
@@ -87,6 +85,84 @@ class MenuManager:
             self.working[menu_id] = Menu(name=menu_id, is_submenu=True)
         return self.working[menu_id]
 
+    def _generate_unique_id(self, prefix: str = "user") -> str:
+        """Generate a unique ID that doesn't exist in any menu or as a menu name."""
+        existing_items = {item.name for menu in self.working.values() for item in menu.items}
+        existing_menus = set(self.working.keys())
+        existing = existing_items | existing_menus
+        while True:
+            name = f"{prefix}-{uuid.uuid4().hex[:8]}"
+            if name not in existing:
+                return name
+
+    def create_custom_widget_menu(self, menu_id: str, item_id: str, suffix: str = "") -> str:
+        """Create a custom widget menu for an item and store the reference.
+
+        Args:
+            menu_id: Menu containing the item
+            item_id: Item to attach custom widget to
+            suffix: Widget slot suffix (e.g., ".2" for second slot)
+
+        Returns:
+            The new menu ID, or empty string if item not found
+        """
+        item = self._get_working_item(menu_id, item_id)
+        if not item:
+            return ""
+
+        cw_menu_id = self._generate_unique_id("custom")
+        self.working[cw_menu_id] = Menu(name=cw_menu_id, is_submenu=True)
+
+        prop_name = f"customWidget{suffix}"
+        item.properties[prop_name] = cw_menu_id
+        self._changed = True
+
+        return cw_menu_id
+
+    def get_custom_widget_menu(self, menu_id: str, item_id: str, suffix: str = "") -> str:
+        """Get the custom widget menu ID for an item.
+
+        Args:
+            menu_id: Menu containing the item
+            item_id: Item to get custom widget for
+            suffix: Widget slot suffix (e.g., ".2" for second slot)
+
+        Returns:
+            The menu ID, or empty string if not set
+        """
+        item = self._get_working_item(menu_id, item_id)
+        if not item:
+            return ""
+        prop_name = f"customWidget{suffix}"
+        return item.properties.get(prop_name, "")
+
+    def clear_custom_widget(self, menu_id: str, item_id: str, suffix: str = "") -> bool:
+        """Clear a custom widget menu and remove the reference.
+
+        Args:
+            menu_id: Menu containing the item
+            item_id: Item to clear custom widget from
+            suffix: Widget slot suffix (e.g., ".2" for second slot)
+
+        Returns:
+            True if cleared successfully
+        """
+        item = self._get_working_item(menu_id, item_id)
+        if not item:
+            return False
+
+        prop_name = f"customWidget{suffix}"
+        cw_menu_id = item.properties.get(prop_name)
+
+        if cw_menu_id:
+            if cw_menu_id in self.working:
+                self.working[cw_menu_id].items.clear()
+            del item.properties[prop_name]
+            self._changed = True
+            return True
+
+        return False
+
     def add_item(self, menu_id: str, after_index: int | None = None, label: str = "") -> MenuItem:
         """Add a new item to a menu.
 
@@ -98,17 +174,14 @@ class MenuManager:
         Returns:
             The newly created MenuItem
         """
-        # Generate unique name for user-added items
-        item_name = f"user-{uuid.uuid4().hex[:8]}"
+        item_name = self._generate_unique_id("user")
 
-        # Create new item
         new_item = MenuItem(
             name=item_name,
             label=label or "New Item",
             actions=[Action(action="noop")],
         )
 
-        # Add to working copy
         menu = self._ensure_working_menu(menu_id)
         if after_index is not None and 0 <= after_index < len(menu.items):
             menu.items.insert(after_index + 1, new_item)
@@ -152,7 +225,6 @@ class MenuManager:
         """
         menu = self._ensure_working_menu(menu_id)
 
-        # Deep copy to avoid sharing references
         restored = copy.deepcopy(item)
         menu.items.append(restored)
         self._changed = True
@@ -168,7 +240,6 @@ class MenuManager:
         Returns:
             True if item was reset
         """
-        # Get the default item
         default_menu = self.config.get_default_menu(menu_id)
         if not default_menu:
             return False
@@ -182,7 +253,6 @@ class MenuManager:
         if not default_item:
             return False
 
-        # Find and replace in working copy
         if menu_id not in self.working:
             return False
 
@@ -193,6 +263,79 @@ class MenuManager:
                 return True
 
         return False
+
+    def reset_menu(self, menu_id: str) -> bool:
+        """Reset a menu to its skin default values.
+
+        For skin-defined menus, restores all items to defaults.
+        For custom menus (user-created), clears all items.
+
+        Args:
+            menu_id: ID of menu to reset
+
+        Returns:
+            True if menu was reset
+        """
+        default_menu = self.config.get_default_menu(menu_id)
+
+        if default_menu:
+            self.working[menu_id] = copy.deepcopy(default_menu)
+            self._changed = True
+            return True
+
+        if menu_id in self.working:
+            self.working[menu_id].items.clear()
+            self._changed = True
+            return True
+
+        return False
+
+    def reset_menu_tree(self, menu_id: str, _visited: set[str] | None = None) -> bool:
+        """Reset a menu and all its submenus by following submenu references.
+
+        Recursively resets the specified menu and any menus referenced by
+        item submenu properties.
+
+        Args:
+            menu_id: ID of root menu to reset
+            _visited: Internal set to prevent infinite loops
+
+        Returns:
+            True if any menus were reset
+        """
+        if _visited is None:
+            _visited = set()
+
+        if menu_id in _visited:
+            return False
+        _visited.add(menu_id)
+
+        menu = self.working.get(menu_id)
+        submenu_refs = []
+        if menu:
+            for item in menu.items:
+                if item.submenu:
+                    submenu_refs.append(item.submenu)
+
+        changed = self.reset_menu(menu_id)
+
+        for submenu_id in submenu_refs:
+            if self.reset_menu_tree(submenu_id, _visited):
+                changed = True
+
+        return changed
+
+    def reset_all_submenus(self) -> bool:
+        """Reset all submenus (menus defined with <submenu> tag).
+
+        Returns:
+            True if any menus were reset
+        """
+        changed = False
+        for menu in self.working.values():
+            if menu.is_submenu and self.reset_menu(menu.name):
+                changed = True
+        return changed
 
     def is_item_modified(self, menu_id: str, item_id: str) -> bool:
         """Check if an item differs from its skin default.
@@ -210,7 +353,6 @@ class MenuManager:
 
         default_menu = self.config.get_default_menu(menu_id)
         if not default_menu:
-            # No defaults means it's a user-created item
             return False
 
         default_item = None
@@ -220,10 +362,8 @@ class MenuManager:
                 break
 
         if not default_item:
-            # Item doesn't exist in defaults (user-added)
             return False
 
-        # Compare key properties
         if working_item.label != default_item.label:
             return True
         if working_item.actions != default_item.actions:
@@ -253,7 +393,14 @@ class MenuManager:
             return list(default_menu.items)
 
         working_names = {item.name for item in working_menu.items}
-        return [item for item in default_menu.items if item.name not in working_names]
+        removed = []
+        for item in default_menu.items:
+            if item.name in working_names:
+                continue
+            if item.dialog_visible and not _check_dialog_visible(item.dialog_visible):
+                continue
+            removed.append(item)
+        return removed
 
     def has_removed_items(self, menu_id: str) -> bool:
         """Check if menu has removed items that can be restored."""
@@ -277,7 +424,6 @@ class MenuManager:
         if not items:
             return False
 
-        # Find current index
         current_index = None
         for i, item in enumerate(items):
             if item.name == item_id:
@@ -291,7 +437,6 @@ class MenuManager:
         if new_index < 0 or new_index >= len(items):
             return False
 
-        # Swap items in working copy
         items[current_index], items[new_index] = items[new_index], items[current_index]
 
         self._changed = True
@@ -362,7 +507,6 @@ class MenuManager:
             return False
 
         if prop == "actions" and isinstance(value, list):
-            # Convert action strings to Action objects
             item.actions = [Action(action=a) for a in value]
         else:
             setattr(item, prop, value)
@@ -399,7 +543,6 @@ class MenuManager:
         """Generate userdata by diffing working copy against defaults."""
         userdata = UserData()
 
-        # Build default menu lookup
         default_menus = {m.name: m for m in self.config.default_menus}
 
         for menu_id, working_menu in self.working.items():
@@ -415,7 +558,6 @@ class MenuManager:
         override = MenuOverride()
 
         if default is None:
-            # Entirely user-created menu - all items are new
             for item in working.items:
                 override.items.append(self._item_to_override(item, is_new=True))
             return override if override.items else None
@@ -423,27 +565,23 @@ class MenuManager:
         default_items = {item.name: item for item in default.items}
         working_items = {item.name: item for item in working.items}
 
-        # Find removed items (skip items filtered by dialog_visible)
         for name, default_item in default_items.items():
             if name not in working_items:
-                # Don't mark as removed if it was filtered by dialog_visible
+                # Skip items filtered by dialog_visible - they weren't user-removed
                 if default_item.dialog_visible and not _check_dialog_visible(
                     default_item.dialog_visible
                 ):
                     continue
                 override.removed.append(name)
 
-        # Find modified or new items (preserving working order for position tracking)
         for idx, working_item in enumerate(working.items):
             default_item = default_items.get(working_item.name)
 
             if default_item is None:
-                # New item
                 item_override = self._item_to_override(working_item, is_new=True)
                 item_override.position = idx
                 override.items.append(item_override)
             else:
-                # Check for modifications or position change
                 default_idx = next(
                     (i for i, d in enumerate(default.items) if d.name == working_item.name),
                     None
@@ -454,11 +592,9 @@ class MenuManager:
                 if item_diff or position_changed:
                     if item_diff is None:
                         item_diff = MenuItemOverride(name=working_item.name)
-                    # Always include position if item is in userdata
                     item_diff.position = idx
                     override.items.append(item_diff)
 
-        # Only return if there are actual changes
         if not override.items and not override.removed:
             return None
         return override
@@ -484,7 +620,6 @@ class MenuManager:
             diff.disabled = working.disabled
             has_changes = True
 
-        # Check properties - only save those that differ
         if working.properties != default.properties:
             diff_props = {
                 k: v for k, v in working.properties.items()

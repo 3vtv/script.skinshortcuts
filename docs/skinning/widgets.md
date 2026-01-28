@@ -6,14 +6,14 @@ The `widgets.xml` file defines widgets that users can assign to menu items.
 
 ## Table of Contents
 
-- [File Structure](#file-structure)
-- [Widget Element](#widget-element)
-- [Widget Types](#widget-types)
-- [Groups](#groups)
-- [Dynamic Content](#dynamic-content)
-- [Conditions](#conditions)
-- [Output Properties](#output-properties)
-- [Multiple Widgets](#multiple-widgets)
+* [File Structure](#file-structure)
+* [Widget Element](#widget-element)
+* [Widget Types](#widget-types)
+* [Groups](#groups)
+* [Dynamic Content](#dynamic-content)
+* [Conditions](#conditions)
+* [Output Properties](#output-properties)
+* [Multiple Widgets](#multiple-widgets)
 
 ---
 
@@ -43,11 +43,8 @@ Widgets and groups are defined directly at the root level:
 ## Widget Element
 
 ```xml
-<widget name="recent-movies" label="$LOCALIZE[20386]" type="movies"
-        source="library" condition="..." visible="...">
+<widget name="recent-movies" label="$LOCALIZE[20386]" type="movies" target="videos" icon="DefaultRecentlyAddedMovies.png" source="library" condition="..." visible="...">
   <path>videodb://recentlyaddedmovies/</path>
-  <target>videos</target>
-  <icon>DefaultRecentlyAddedMovies.png</icon>
   <limit>25</limit>
   <sortby>dateadded</sortby>
   <sortorder>descending</sortorder>
@@ -61,7 +58,9 @@ Widgets and groups are defined directly at the root level:
 | `name` | Yes | - | Unique identifier |
 | `label` | Yes | - | Display label |
 | `type` | No | - | Content type (e.g., `movies`, `episodes`, `albums`) |
-| `source` | No | - | Source type: `library`, `playlist`, `addon` |
+| `target` | No | `videos` | Target window: `videos`, `music`, `pictures`, `programs` |
+| `icon` | No | - | Icon for picker |
+| `source` | No | - | Source type: `library`, `playlist`, `addon`. Inherited from parent group if not set |
 | `condition` | No | - | Property condition (evaluated against item properties) |
 | `visible` | No | - | Kodi visibility condition (evaluated at runtime) |
 | `slot` | No | - | For `type="custom"`: widget property slot |
@@ -70,9 +69,7 @@ Widgets and groups are defined directly at the root level:
 
 | Element | Required | Default | Description |
 |---------|----------|---------|-------------|
-| `<path>` | Yes* | - | Content path. *Not required for `type="custom"` |
-| `<target>` | No | `videos` | Target window: `videos`, `music`, `pictures`, `programs` |
-| `<icon>` | No | - | Icon for picker |
+| `<path>` | Yes\* | - | Content path. \*Not required for `type="custom"` |
 | `<limit>` | No | - | Maximum number of items |
 | `<sortby>` | No | - | Sort field |
 | `<sortorder>` | No | - | Sort direction: `ascending` or `descending` |
@@ -147,11 +144,11 @@ Organize widgets into categories for the picker dialog:
 
     <!-- Nested group -->
     <group name="genres" label="By Genre">
-      <content source="library" target="moviegenres"/>
+      <content source="library" target="moviegenres" />
     </group>
 
     <!-- Dynamic content -->
-    <content source="playlists" target="video"/>
+    <content source="playlists" target="videos" />
   </group>
 
   <!-- Flat widget (no group) -->
@@ -172,9 +169,10 @@ Organize widgets into categories for the picker dialog:
 | `visible` | No | Kodi visibility condition (evaluated at runtime) |
 
 Groups can contain:
-- `<widget>` - Widget definitions
-- `<group>` - Nested groups
-- `<content>` - Dynamic content
+
+* `<widget>` - Widget definitions
+* `<group>` - Nested groups
+* `<content>` - Dynamic content
 
 ---
 
@@ -183,34 +181,53 @@ Groups can contain:
 Add dynamic content from system sources:
 
 ```xml
-<content source="playlists" target="video"/>
-<content source="addons" target="video" folder="Video Add-ons"/>
+<content source="playlists" target="videos" />
+<content source="addons" target="videos" folder="Video Add-ons" />
 ```
 
 | Attribute | Description |
 |-----------|-------------|
-| `source` | Content type: `playlists`, `addons`, `sources`, `favourites`, `pvr`, `commands`, `settings`, `library` |
-| `target` | Media context: `video`, `music`, `pictures`, `programs`, `tv`, `radio` |
+| `source` | Content type: `playlists`, `addons`, `sources`, `favourites`, `pvr`, `commands`, `settings`, `library`, `nodes` |
+| `target` | Media context: `videos`, `music`, `pictures`, `programs`, `tv`, `radio` |
 | `folder` | Wrap items in a folder with this label |
 | `path` | Custom path override |
-| `condition` | Visibility condition |
+| `condition` | Property condition (evaluated against item properties) |
+| `visible` | Kodi visibility condition (evaluated at runtime) |
 | `icon` | Icon override |
 | `label` | Label override |
 
-### Library Source
+### Nodes Source
 
-The `library` source provides access to library nodes (genres, years, actors, etc.):
+The `nodes` source provides access to library navigation nodes (the top-level library categories like Movies, TV Shows, Music Videos, etc.):
 
 ```xml
-<content source="library" target="moviegenres"/>
-<content source="library" target="tvgenres"/>
-<content source="library" target="musicgenres"/>
-<content source="library" target="years"/>
-<content source="library" target="studios"/>
-<content source="library" target="actors"/>
-<content source="library" target="directors"/>
-<content source="library" target="artists"/>
-<content source="library" target="albums"/>
+<content source="nodes" target="videos" />
+<content source="nodes" target="music" />
+```
+
+#### Nodes Target Values
+
+| Target | Description |
+|--------|-------------|
+| `videos` | Video library nodes (Movies, TV Shows, Music Videos, etc.) |
+| `music` | Music library nodes (Artists, Albums, Songs, etc.) |
+
+---
+
+### Library Source
+
+The `library` source provides access to library database content (genres, years, actors, etc.):
+
+```xml
+<content source="library" target="moviegenres" />
+<content source="library" target="tvgenres" />
+<content source="library" target="musicgenres" />
+<content source="library" target="years" />
+<content source="library" target="studios" />
+<content source="library" target="actors" />
+<content source="library" target="directors" />
+<content source="library" target="artists" />
+<content source="library" target="albums" />
 ```
 
 #### Library Target Values
@@ -266,9 +283,7 @@ Evaluated at runtime using `xbmc.getCondVisibility()`:
 ### Multiple Conditions
 
 ```xml
-<widget name="advanced" label="Advanced Widget"
-        condition="widgetType=movies"
-        visible="Skin.HasSetting(ShowAdvancedWidgets)">
+<widget name="advanced" label="Advanced Widget" condition="widgetType=movies" visible="Skin.HasSetting(ShowAdvancedWidgets)">
   ...
 </widget>
 ```
@@ -279,15 +294,18 @@ Both conditions must pass for the widget to appear.
 
 ## Output Properties
 
-When a widget is assigned to a menu item, these properties are available:
+When a widget is assigned to a menu item, these core properties are set:
 
 | Property | Description |
 |----------|-------------|
 | `widget` | Widget name |
 | `widgetLabel` | Display label |
 | `widgetPath` | Content path |
-| `widgetType` | Widget type |
 | `widgetTarget` | Target window |
+| `widgetType` | Content type (e.g., `movies`, `episodes`, `albums`) |
+| `widgetSource` | Source type (e.g., `library`, `playlist`, `addon`) |
+
+Additional skin-specific properties can be configured via [properties.xml](properties.md).
 
 Access via `ListItem.Property(name)`:
 
@@ -300,6 +318,8 @@ Access via `ListItem.Property(name)`:
 </control>
 ```
 
+> **See also:** [Built-in Properties](builtin-properties.md) for complete property reference
+
 ---
 
 ## Multiple Widgets
@@ -308,16 +328,16 @@ For multiple widget slots per menu item, use property suffixes:
 
 | Slot | Properties |
 |------|------------|
-| Widget 1 | `widget`, `widgetPath`, `widgetType`, `widgetTarget`, `widgetLabel` |
-| Widget 2 | `widget.2`, `widgetPath.2`, `widgetType.2`, `widgetTarget.2`, `widgetLabel.2` |
+| Widget 1 | `widget`, `widgetPath`, `widgetType`, `widgetTarget`, `widgetLabel`, `widgetSource` |
+| Widget 2 | `widget.2`, `widgetPath.2`, `widgetType.2`, `widgetTarget.2`, `widgetLabel.2`, `widgetSource.2` |
 | Widget 3 | `widget.3`, `widgetPath.3`, ... |
 
 Configure via [subdialogs](menus.md#subdialogs) in `menus.xml`:
 
 ```xml
 <dialogs>
-  <subdialog buttonID="800" mode="widget1" setfocus="309"/>
-  <subdialog buttonID="801" mode="widget2" setfocus="309" suffix=".2"/>
+  <subdialog buttonID="800" mode="widget1" setfocus="309" />
+  <subdialog buttonID="801" mode="widget2" setfocus="309" suffix=".2" />
 </dialogs>
 ```
 
@@ -332,3 +352,7 @@ Display additional widgets:
   <visible>!String.IsEmpty(Container(9000).ListItem.Property(widgetPath.2))</visible>
 </control>
 ```
+
+---
+
+[↑ Top](#widget-configuration) · [Skinning Docs](index.md)
